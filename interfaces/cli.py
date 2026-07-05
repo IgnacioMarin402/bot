@@ -2,22 +2,21 @@
 Interfaz de TERMINAL (adaptador).
 
 Traduce entre el usuario en la consola y el grafo. Fíjate que este archivo
-NO sabe nada de nodos ni de routing: solo habla con `grafo`. Ese es el punto
-de la arquitectura — mañana whatsapp.py hará lo mismo sin tocar el nucleo/.
+NO sabe nada de nodos, routing ni tools: solo llama a `responder()`. Ese es
+el punto de la arquitectura — whatsapp.py hace lo mismo sin tocar el nucleo/.
 """
 
 from langchain_core.messages import HumanMessage
 
-from nucleo.grafo import obtener_grafo
+from nucleo.grafo import responder
 
 
 def iniciar_cli():
-    grafo = obtener_grafo()  # aquí recién se construye (import sin efectos)
     print("Pídele algo a Alejandro:")
     print("(Escribe 'salir' para terminar)\n")
 
     # El thread_id identifica ESTA conversación. Cámbialo y empiezas de cero.
-    config = {"configurable": {"thread_id": "yo-soy-el-jefe-malo"}}
+    thread_id = "yo-soy-el-jefe-malo"
 
     while True:
         entrada = input("Tú: ").strip()
@@ -27,10 +26,8 @@ def iniciar_cli():
         if not entrada:
             continue
 
-        # Solo pasamos el mensaje NUEVO; la memoria (checkpointer) recuerda el resto.
-        resultado = grafo.invoke(
-            {"messages": [HumanMessage(content=entrada)]},
-            config=config,
-        )
-        # .text extrae el texto plano (algunos modelos devuelven bloques).
-        print("Alejandro:", resultado["messages"][-1].text, "\n")
+        # responder() puede devolver más de un mensaje (ej. saludo + respuesta
+        # la primera vez que este thread_id escribe).
+        for texto in responder(HumanMessage(content=entrada), thread_id):
+            print("Alejandro:", texto)
+        print()

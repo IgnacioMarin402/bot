@@ -12,7 +12,7 @@ checkpointer), no solo el código.
 ```powershell
 uv sync                # instalar dependencias (desde uv.lock)
 uv run poe dev         # correr el bot en terminal (CLI)
-uv run poe prod        # servidor web WhatsApp (cuando exista interfaces/whatsapp.py)
+uv run poe prod        # servidor web WhatsApp (interfaces/whatsapp.py)
 uv run poe dev-watch   # servidor web con auto-reload
 uv run poe lint        # ruff check
 uv run poe format      # ruff format
@@ -22,7 +22,7 @@ uv run poe graph       # dibujar el grafo (Mermaid + PNG)
 Smoke test sin gastar API (keys dummy):
 
 ```powershell
-$env:OPENROUTER_API_KEY = "dummy"; uv run python -c "from nucleo.grafo import grafo; print('OK')"
+$env:OPENROUTER_API_KEY = "dummy"; uv run python -c "from nucleo.grafo import obtener_grafo; obtener_grafo(); print('OK')"
 ```
 
 ## Arquitectura (Ports & Adapters) — reglas duras
@@ -32,31 +32,41 @@ main.py          → punto de entrada (mínimo, solo delega)
 nucleo/          → lógica del bot. NO sabe de CLI ni WhatsApp
   config.py      → único lugar que expone `llm` (ya inyectado)
   llm/           → puerto+adaptadores del modelo (proveedores.py + crear_llm)
-  state.py       → State (TypedDict + reducers)
+                   también: nombre_proveedor(), tiene_vision()
+  state.py       → State (TypedDict + reducers + campos opcionales)
   nodos.py       → nodos del grafo
   router.py      → aristas condicionales
-  grafo.py       → ensambla y compila; expone `grafo`
-interfaces/      → adaptadores de entrada (cli.py, whatsapp.py futuro)
+  tools.py       → funciones @tool que el LLM puede pedir ejecutar
+  mensajes.py    → construcción de mensajes multimodales (texto+imagen)
+  grafo.py       → ensambla y compila; expone `obtener_grafo()` y `responder()`
+interfaces/      → adaptadores de entrada (cli.py, whatsapp.py)
 memory/          → memoria del proyecto (decisiones y roadmap)
 ```
 
 1. **`nucleo/` NUNCA importa de `interfaces/`.** Solo al revés.
-2. Las interfaces consumen únicamente `obtener_grafo()` de `nucleo.grafo`
-   (y mensajes de `langchain_core`). Nada de nodos/router directo.
-   **Importar módulos no debe hacer I/O** (crear archivos, abrir conexiones,
-   llamar red): el grafo es un singleton perezoso vía `lru_cache`. Validar
-   config/keys al importar sí está permitido (fail fast, sin I/O).
+2. Las interfaces consumen únicamente `responder()` (o `obtener_grafo()` si
+   necesitan algo más fino, ej. `get_state()`) de `nucleo.grafo` — y mensajes
+   de `langchain_core`. Nada de nodos/router directo. **Importar módulos no
+   debe hacer I/O** (crear archivos, abrir conexiones, llamar red): el grafo
+   es un singleton perezoso vía `lru_cache`. Validar config/keys al importar
+   sí está permitido (fail fast, sin I/O).
 3. **El LLM solo se instancia en `nucleo/llm/proveedores.py`.** El resto del
    código lo obtiene con `from nucleo.config import llm`. Prohibido crear
-   `ChatXxx(...)` en otro lado.
+   `ChatXxx(...)` en otro lado. Para variar parámetros por nodo/conversación
+   (ej. `temperature`), usar `.bind(...)` sobre `llm` — no crear otro cliente.
 4. Los nodos devuelven **dicts parciales del State** (los reducers como
    `add_messages` acumulan). Nunca mutar el state recibido.
 5. Respuestas fijas → devolver `AIMessage` directo en el nodo, **sin llamar
    al LLM** (determinismo y cero costo). No pedirle al LLM que "repita una frase".
 6. **Secretos SOLO en `.env`** (gitignored). Jamás en código, logs ni commits.
    `.env.example` documenta las variables sin valores reales.
-7. Una conversación = un `thread_id` del checkpointer. En WhatsApp será el
+7. Una conversación = un `thread_id` del checkpointer. En WhatsApp es el
    número de teléfono.
+8. Un router que decide según "el último mensaje" debe usar el último mensaje
+   **del usuario** (`HumanMessage`), no `state["messages"][-1]` a secas — si
+   un nodo previo en el mismo turno ya agregó su propia respuesta (ej.
+   `saludo`), el último mensaje sería del bot, no del usuario. Ver
+   `nucleo/router.py::_ultimo_mensaje_usuario` y la decisión 2026-07-06.
 
 ## Clean code del proyecto
 
@@ -82,8 +92,8 @@ conditional edges + edge a END) → probar el router en aislamiento.
 + línea en `PROVEEDORES` → documentar la key en `.env.example` → dependencia
 con `uv add langchain-<proveedor>`.
 
-**Añadir una interfaz:** archivo nuevo en `interfaces/` que importe `grafo`.
-No tocar `nucleo/`.
+**Añadir una interfaz:** archivo nuevo en `interfaces/` que importe
+`responder()` de `nucleo.grafo`. No tocar `nucleo/`.
 
 ## Memoria del proyecto (`memory/`)
 

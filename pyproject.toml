@@ -20,6 +20,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     # Twilio manda los mensajes como form-data; FastAPI necesita esto para leerlos.
     "python-multipart>=0.0.9",
+    "httpx>=0.28.1",
 ]
 
 # Herramientas de desarrollo (no se instalan en producción).

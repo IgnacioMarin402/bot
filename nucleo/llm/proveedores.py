@@ -73,3 +73,10 @@ PROVEEDORES = {
     "groq": groq,
     "xai": xai,
 }
+
+# Proveedores cuyo modelo configurado arriba SABE interpretar imágenes.
+# Verificado: gemini-2.0-flash y claude-haiku-4-5 son multimodales.
+# deepseek-chat (openrouter), llama-3.3-70b (groq) y grok-3 (xai) aquí NO
+# están confirmados con visión — si cambias esos modelos por versiones que sí
+# la tengan, agrega el nombre del proveedor a este set.
+VISION = {"gemini", "claude"}

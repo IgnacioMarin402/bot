@@ -69,3 +69,82 @@ Cuando lleguen imágenes, se interpretarán pasándolas a un LLM con visión
 (bloques de imagen en el mensaje), no con OCR aparte. Requiere proveedor
 multimodal (el default actual `deepseek-chat` NO ve imágenes; Gemini Flash sí).
 Se implementará DESPUÉS del webhook básico de WhatsApp, no antes.
+
+## 2026-07-06 — Router: `flojera` por impedimento, no por largo
+Cambio pedido por el dueño: el trigger de 30 caracteres era arbitrario y no
+capturaba la intención real ("el jefe evade cuando hay un PROBLEMA, no
+cuando el mensaje es largo"). Se reemplazó por `patrones_impedimento`: lista
+de frases típicas en español + jerga chilena ("tengo un problema", "no
+funciona", "me eché x", "cagué el deploy"). Es heurística, no un clasificador
+LLM — se decidió así para mantener el router gratis, instantáneo y testeable
+sin gastar API (consistente con el resto del proyecto). Riesgo aceptado:
+frases de impedimento no listadas no matchean; evolución natural si esto
+limita = nodo clasificador con LLM antes del router (ver roadmap).
+
+## 2026-07-06 — Bug real: router con `.content` rompía en mensajes multimodales
+Al construir el mensaje con imagen (`nucleo/mensajes.py`), `.content` pasa a
+ser una LISTA de bloques (texto + imagen), no un string. El router hacía
+`.content.lower()` → `AttributeError`. Se cambió a `.text` (misma propiedad
+que ya se usaba para mostrar respuestas), que normaliza a string en ambos
+casos. Cazado ANTES de producción probando el router con un mensaje
+multimodal simulado — mismo método que el bug de "entONCEs": reproducir en
+aislamiento antes de asumir que algo funciona.
+
+## 2026-07-06 — Imágenes: visión vive en nucleo/mensajes.py, descarga en interfaces/whatsapp.py
+Separación deliberada: el FORMATO del mensaje multimodal (bloques de texto +
+imagen en base64) es un detalle de cómo se habla con el LLM (LangChain) →
+vive en `nucleo/`, reutilizable por cualquier interfaz futura. La DESCARGA del
+adjunto (URL protegida con Basic Auth de Twilio) es un detalle de WhatsApp →
+vive en `interfaces/whatsapp.py`. `nucleo/llm` expone `tiene_vision()` para
+que el webhook rechace con un mensaje digno si el proveedor activo no ve
+imágenes, en vez de un error críptico del LLM. `VISION = {"gemini", "claude"}`
+(verificado: gemini-2.0-flash y claude-haiku-4-5 son multimodales; los demás
+proveedores configurados hoy —deepseek-chat, llama-3.3-70b, grok-3— no están
+confirmados con visión).
+
+## 2026-07-06 — Tools con ToolNode: `hora_actual` y `tirar_dado`
+Primeras tools del proyecto, elegidas sin API externa ni costo (se prueban
+en aislamiento con `.invoke({...})`, sin gastar el LLM). Solo `nodo_chat` usa
+`llm.bind_tools(TOOLS)` — `nodo_broma` es una tarea de una sola pasada, no
+necesita herramientas. Grafo: `chat` ya no va siempre a `END`; usa
+`tools_condition` (prebuilt de LangGraph) para decidir entre `END` y el nodo
+`tools` (un `ToolNode`), con loop de vuelta `tools → chat` para que el LLM
+redacte la respuesta final con el resultado (patrón ReAct estándar).
+
+## 2026-07-06 — State: campo `temperatura` (NotRequired) + primer uso real
+Respuesta a "¿qué más podría viajar en el State?": se agregó `temperatura:
+NotRequired[float]`, sin reducer especial (LangGraph usa "último valor
+escrito"). `nodo_chat`/`nodo_broma` la leen con `state.get("temperatura",
+default_del_nodo)` y hacen `.bind(temperature=x)` sobre el LLM (no muta el
+cliente compartido). Defaults distintos por nodo (`broma`=0.9 > `chat`=0.7)
+para que el campo tenga un efecto visible desde ya, sin construir todavía un
+mecanismo para que el usuario la cambie por chat (queda en roadmap si hace
+falta). Otros candidatos discutidos y NO implementados aún: nombre del
+usuario, idioma, contador de mensajes, humor del jefe.
+
+## 2026-07-06 — Nodo `saludo`: presentación en el primer mensaje + multi-mensaje
+Pedido del dueño: que Alejandro se presente la primera vez y "mande 2
+mensajes". Diseño: `router_entrada` (nueva arista desde START) detecta
+`es_primera_vez()` (`len(state["messages"]) <= 1`, válido porque el reducer
+ya fusionó historial+mensaje nuevo ANTES de correr nodos) y manda a `saludo`
+(nodo fijo); desde `saludo` se re-evalúa el `router` normal para llegar al
+nodo que corresponda de verdad. Efecto: la primera interacción dejó DOS
+`AIMessage` en el historial en el mismo turno (presentación + respuesta).
+Para que las interfaces pudieran mostrar AMBOS (no solo el último mensaje),
+se creó `nucleo/grafo.py::responder()` — centraliza "invocar + calcular qué
+mensajes son nuevos + filtrar solo los de texto para el usuario" en un solo
+lugar, reemplazando las llamadas directas a `grafo.invoke()` en `cli.py` y
+`whatsapp.py`. TwiML de Twilio soporta varios `<Message>` en una respuesta
+(Twilio los entrega como burbujas separadas), así que `whatsapp.py::twiml()`
+pasó de recibir un string a recibir `list[str]`.
+
+## 2026-07-06 — Bug real: el router se confundía con el mensaje del propio bot
+Al probar `saludo` de punta a punta, un primer mensaje "once" terminó yendo
+al nodo `chat` (LLM) en vez de `once` (fijo). Causa: el router miraba
+`state["messages"][-1]` a secas, pero al re-evaluarse DESPUÉS de `saludo`,
+el último mensaje ya es la respuesta del bot ("Ah, llegaste..."), no lo que
+el usuario preguntó. Fix: `_ultimo_mensaje_usuario()` busca hacia atrás el
+`HumanMessage` más reciente. Lección: un router "por último mensaje" deja de
+ser válido en cuanto hay más de un nodo antes de la decisión — cazado con un
+test end-to-end antes de que llegara a WhatsApp real (mismo hábito que los
+bugs anteriores: reproducir en aislamiento, no asumir).

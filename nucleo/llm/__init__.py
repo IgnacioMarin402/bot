@@ -9,12 +9,22 @@ import os
 
 from langchain_core.language_models import BaseChatModel
 
-from nucleo.llm.proveedores import PROVEEDORES
+from nucleo.llm.proveedores import PROVEEDORES, VISION
+
+
+def nombre_proveedor() -> str:
+    """El proveedor activo según .env (mismo default que crear_llm)."""
+    return os.getenv("LLM_PROVIDER", "openrouter").lower()
 
 
 def crear_llm() -> BaseChatModel:
-    nombre = os.getenv("LLM_PROVIDER", "openrouter").lower()
+    nombre = nombre_proveedor()
     if nombre not in PROVEEDORES:
         opciones = ", ".join(PROVEEDORES)
         raise SystemExit(f"LLM_PROVIDER='{nombre}' no existe. Opciones válidas: {opciones}")
     return PROVEEDORES[nombre]()  # llama al adaptador elegido
+
+
+def tiene_vision() -> bool:
+    """True si el proveedor activo puede interpretar imágenes."""
+    return nombre_proveedor() in VISION
