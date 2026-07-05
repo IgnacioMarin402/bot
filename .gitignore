@@ -1,0 +1,9 @@
+# Entorno virtual
+.venv/
+
+# Secretos — ¡NUNCA subir la API key!
+.env
+
+# Cache de Python
+__pycache__/
+*.pyc
