@@ -6,6 +6,7 @@ proveedor al selector (nucleo/llm). El resto del código solo hace:
 
     from nucleo.config import llm
 """
+
 from dotenv import load_dotenv
 
 from nucleo.llm import crear_llm

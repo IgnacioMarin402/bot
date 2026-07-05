@@ -1,0 +1,55 @@
+[project]
+name = "alejandro-bot"
+version = "0.1.0"
+description = "Chatbot 'Alejandro' con LangGraph — proyecto de aprendizaje"
+requires-python = ">=3.12"
+dependencies = [
+    # Núcleo del agente
+    "langgraph>=1.2.7",
+    "langgraph-checkpoint-sqlite>=3.1.0",
+    # Adaptadores de LLM (Ports & Adapters)
+    "langchain-openai>=1.3.3",
+    "langchain-anthropic>=1.4.8",
+    "langchain-google-genai>=4.2.6",
+    "langchain-groq>=1.1.3",
+    "langchain-xai>=1.2.2",
+    # Utilidades
+    "python-dotenv>=1.2.2",
+    # Interfaz web (para WhatsApp). uvicorn[standard] trae watchfiles (--reload).
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    # Twilio manda los mensajes como form-data; FastAPI necesita esto para leerlos.
+    "python-multipart>=0.0.9",
+]
+
+# Herramientas de desarrollo (no se instalan en producción).
+[dependency-groups]
+dev = [
+    "poethepoet>=0.29",
+    "ruff>=0.7",
+]
+
+# Esto NO es una librería instalable, es una app: uv solo gestiona dependencias.
+[tool.uv]
+package = false
+
+# ---------------------------------------------------------------------------
+# Task runner (estilo "npm scripts"). Uso: uv run poe <tarea>
+# ---------------------------------------------------------------------------
+[tool.poe.tasks]
+dev = { cmd = "python main.py", help = "Corre el bot en la terminal (CLI)" }
+prod = { cmd = "uvicorn interfaces.whatsapp:app --host 0.0.0.0 --port 8000", help = "Servidor web (WhatsApp). Requiere interfaces/whatsapp.py (próximo paso)" }
+dev-watch = { cmd = "uvicorn interfaces.whatsapp:app --reload", help = "Servidor web con auto-reload al guardar. Requiere interfaces/whatsapp.py" }
+lint = { cmd = "ruff check .", help = "Revisa el código (linter)" }
+format = { cmd = "ruff format .", help = "Formatea el código" }
+graph = { cmd = "python ver_grafo.py", help = "Dibuja el grafo (mermaid + PNG)" }
+
+# ---------------------------------------------------------------------------
+# Linter / formatter
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]   # errores de estilo, pyflakes, orden de imports
+ignore = ["E501"]          # largo de línea lo maneja el formatter, no molesta aquí

@@ -12,6 +12,7 @@ poder ROTAR por nombre desde el .env (LLM_PROVIDER=gemini, claude, ...).
 Los imports son perezosos (dentro de cada función) para que, si no tienes
 instalada una librería, solo falle ESE proveedor y no todo el programa.
 """
+
 import os
 
 from langchain_core.language_models import BaseChatModel
@@ -27,6 +28,7 @@ def _exigir(clave: str) -> str:
 
 def openrouter() -> BaseChatModel:
     from langchain_openai import ChatOpenAI
+
     return ChatOpenAI(
         model="deepseek/deepseek-chat",
         base_url="https://openrouter.ai/api/v1",
@@ -37,24 +39,28 @@ def openrouter() -> BaseChatModel:
 
 def gemini() -> BaseChatModel:
     from langchain_google_genai import ChatGoogleGenerativeAI
+
     _exigir("GOOGLE_API_KEY")  # la librería la lee sola del entorno
     return ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7)
 
 
 def claude() -> BaseChatModel:
     from langchain_anthropic import ChatAnthropic
+
     _exigir("ANTHROPIC_API_KEY")
     return ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0.7)
 
 
 def groq() -> BaseChatModel:
     from langchain_groq import ChatGroq
+
     _exigir("GROQ_API_KEY")
     return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.7)
 
 
 def xai() -> BaseChatModel:
     from langchain_xai import ChatXAI
+
     _exigir("XAI_API_KEY")
     return ChatXAI(model="grok-3", temperature=0.7)
 

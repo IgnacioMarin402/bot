@@ -15,6 +15,7 @@ Estructura (arquitectura Ports & Adapters):
 
 Regla de oro: nucleo/ NUNCA importa de interfaces/. Solo al revés.
 """
+
 from interfaces.cli import iniciar_cli
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
 """Dibuja el grafo — en texto (Mermaid) y como PNG."""
-from nucleo.grafo import grafo
+
+from nucleo.grafo import obtener_grafo
+
+grafo = obtener_grafo()
 
 # 1) Versión texto (Mermaid): siempre funciona, sin internet.
 print("=== Diagrama Mermaid (pega este texto en https://mermaid.live) ===")

@@ -5,12 +5,14 @@ Traduce entre el usuario en la consola y el grafo. Fíjate que este archivo
 NO sabe nada de nodos ni de routing: solo habla con `grafo`. Ese es el punto
 de la arquitectura — mañana whatsapp.py hará lo mismo sin tocar el nucleo/.
 """
+
 from langchain_core.messages import HumanMessage
 
-from nucleo.grafo import grafo
+from nucleo.grafo import obtener_grafo
 
 
 def iniciar_cli():
+    grafo = obtener_grafo()  # aquí recién se construye (import sin efectos)
     print("Pídele algo a Alejandro:")
     print("(Escribe 'salir' para terminar)\n")
 

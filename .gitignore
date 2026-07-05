@@ -4,6 +4,13 @@
 # Secretos — ¡NUNCA subir la API key!
 .env
 
-# Cache de Python
+# Caches
 __pycache__/
 *.pyc
+.ruff_cache/
+
+# Memoria persistente del bot (conversaciones) + archivos WAL de SQLite
+memoria.sqlite*
+
+# Artefactos generados (se recrean con: uv run poe graph)
+grafo.png

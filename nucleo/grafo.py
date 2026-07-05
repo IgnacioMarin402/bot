@@ -1,17 +1,30 @@
 """
 Construcción del GRAFO: une State + nodos + router + memoria.
 
-Este módulo expone `grafo`, el objeto ya compilado y listo para usar.
-Las interfaces (CLI, WhatsApp) solo importan esto:
+Este módulo expone `obtener_grafo()`. Las interfaces (CLI, WhatsApp) hacen:
 
-    from nucleo.grafo import grafo
+    from nucleo.grafo import obtener_grafo
+    grafo = obtener_grafo()
+
+¿Por qué una función y no un objeto ya construido? Para que IMPORTAR este
+módulo no tenga efectos secundarios (crear memoria.sqlite, abrir conexiones).
+El grafo se construye recién cuando alguien lo pide — y una sola vez, porque
+lru_cache lo convierte en singleton perezoso.
 """
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
 
-from nucleo.state import State
-from nucleo.nodos import nodo_chat, nodo_broma, nodo_once, nodo_flojera
+import sqlite3
+from functools import lru_cache
+from pathlib import Path
+
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, START, StateGraph
+
+from nucleo.nodos import nodo_broma, nodo_chat, nodo_flojera, nodo_once
 from nucleo.router import router
+from nucleo.state import State
+
+# Archivo donde vive la memoria. Se crea solo al lado del proyecto.
+RUTA_DB = Path(__file__).resolve().parent.parent / "memoria.sqlite"
 
 
 def construir_grafo():
@@ -36,11 +49,17 @@ def construir_grafo():
     builder.add_edge("broma", END)
     builder.add_edge("flojera", END)
 
-    # 4. Checkpointer: memoria en RAM (se pierde al cerrar). Para memoria
-    #    persistente en disco, cambiar por SqliteSaver.
-    memoria = MemorySaver()
+    # 4. Checkpointer PERSISTENTE: guarda el estado en un archivo SQLite, así
+    #    Alejandro recuerda cada conversación (por thread_id) aunque cierres.
+    #    check_same_thread=False -> la conexión podrá usarse desde el servidor
+    #    web (WhatsApp) más adelante, no solo desde el hilo principal.
+    conexion = sqlite3.connect(RUTA_DB, check_same_thread=False)
+    memoria = SqliteSaver(conexion)
     return builder.compile(checkpointer=memoria)
 
 
-# El grafo ya compilado, listo para que cualquier interfaz lo use.
-grafo = construir_grafo()
+# Singleton perezoso: la PRIMERA llamada construye el grafo (y ahí recién se
+# crea/abre memoria.sqlite); las siguientes devuelven el mismo objeto cacheado.
+@lru_cache(maxsize=1)
+def obtener_grafo():
+    return construir_grafo()
