@@ -30,9 +30,11 @@ para rechazar peticiones que no vengan de Twilio.
 """
 
 import os
+import sqlite3
 from xml.sax.saxutils import escape
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Form
 from fastapi.responses import Response
 from langchain_core.messages import HumanMessage
@@ -54,11 +56,21 @@ def twiml(textos: list[str]) -> Response:
 
 def _descargar_adjunto(url: str) -> bytes:
     """Descarga un adjunto de Twilio (imagen o audio; Basic Auth con tu cuenta)."""
+    load_dotenv(override=True)
     sid = os.getenv("TWILIO_ACCOUNT_SID", "")
     token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    respuesta = httpx.get(url, auth=(sid, token), timeout=15)
+    respuesta = httpx.get(url, auth=(sid, token), follow_redirects=True, timeout=15)
     respuesta.raise_for_status()
     return respuesta.content
+
+
+def _limpiar_memoria(nombre_bot: str, thread_id: str) -> None:
+    """Borra el historial de SQLite para un usuario si envía /reset."""
+    db_path = f"memoria_{nombre_bot}.sqlite"
+    if os.path.exists(db_path):
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
+            conn.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
 
 
 @app.get("/")
@@ -80,6 +92,10 @@ def _atender(
     hay_adjunto = NumMedia != "0" and MediaUrl0 != ""
     es_imagen = hay_adjunto and MediaContentType0.startswith("image/")
     es_audio = hay_adjunto and MediaContentType0.startswith("audio/")
+
+    if texto.lower() in ["/reset", "/reiniciar", "/limpiar"]:
+        _limpiar_memoria(nombre_bot, From)
+        return twiml(["🧹 Memoria reiniciada. ¡Comenzamos una conversación limpia!"])
 
     if not texto and not hay_adjunto:
         return twiml(["No me llegó texto 😅 ¿me lo reenvías?"])

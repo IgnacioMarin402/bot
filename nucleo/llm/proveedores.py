@@ -41,7 +41,7 @@ def gemini() -> BaseChatModel:
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     _exigir("GOOGLE_API_KEY")  # la librería la lee sola del entorno
-    return ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0.7)
+    return ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
 
 
 def claude() -> BaseChatModel:

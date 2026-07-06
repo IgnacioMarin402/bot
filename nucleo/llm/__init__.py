@@ -14,7 +14,7 @@ from nucleo.llm.proveedores import AUDIO, PROVEEDORES, VISION
 
 def nombre_proveedor() -> str:
     """El proveedor activo según .env (mismo default que crear_llm)."""
-    return os.getenv("LLM_PROVIDER", "openrouter").lower()
+    return os.getenv("LLM_PROVIDER", "gemini").lower()
 
 
 def crear_llm() -> BaseChatModel:
