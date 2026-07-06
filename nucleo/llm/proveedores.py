@@ -80,3 +80,8 @@ PROVEEDORES = {
 # están confirmados con visión — si cambias esos modelos por versiones que sí
 # la tengan, agrega el nombre del proveedor a este set.
 VISION = {"gemini", "claude"}
+
+# Proveedores que entienden AUDIO de entrada (notas de voz). Solo Gemini lo
+# hace nativo entre los configurados: Claude no acepta audio; el resto
+# necesitaría un paso previo de transcripción (ej. Whisper vía Groq).
+AUDIO = {"gemini"}

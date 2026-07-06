@@ -138,6 +138,90 @@ lugar, reemplazando las llamadas directas a `grafo.invoke()` en `cli.py` y
 (Twilio los entrega como burbujas separadas), así que `whatsapp.py::twiml()`
 pasó de recibir un string a recibir `list[str]`.
 
+## 2026-07-06 — Protecciones anti-abuso: `nucleo/limites.py`
+Tres defensas, todas testeables sin API (pedido del dueño tras entender los
+rate limits de los proveedores). Principio rector: **rechazar lo más barato
+posible, lo más temprano posible** — un `if` cuesta nanosegundos, el LLM
+cuesta plata. Se aplican en `responder()` ANTES de invocar el grafo, y sus
+rechazos NO se guardan en el historial (lección de la contaminación).
+1. **Rate limit**: 10 mensajes/min por `thread_id`, ventana deslizante en
+   memoria (dict + deque + Lock porque FastAPI usa hilos). Se eligió 10 y no
+   15: 1 msg/6 s sobra para un humano, asfixia a un script. Producción
+   multi-proceso necesitaría Redis — innecesario hoy.
+2. **Tope de largo**: 10.000 caracteres. Se chequea ANTES que el rate limit
+   para que un mensaje gigante rechazado no consuma cupo.
+3. **Ventana de jornada (8 h)**: los nodos con LLM envían solo los mensajes
+   de las últimas 8 h ("la jornada laboral de Alejandro") vía
+   `recortar_jornada()`. La memoria completa sigue en SQLite: se limita lo
+   que el LLM VE, no lo que el bot recuerda. Sin esto el costo por turno
+   crece para siempre (el historial completo se re-envía en cada mensaje).
+   Detalle técnico: los mensajes de LangChain no traen timestamp — se
+   estampan en `responder()` (`additional_kwargs["marca_tiempo"]`, que el
+   checkpointer persiste). El corte siempre empieza en un HumanMessage para
+   no dejar respuestas "huérfanas" al inicio del contexto.
+
+## 2026-07-06 — Refactor final: nucleo/ = plataforma pura; cada bot en bots/<nombre>/
+Alejandro salió de nucleo/ hacia bots/alejandro/ (nodos, router, tools,
+grafo — copiados con `cp` para preservar exactamente la lista de impedimentos
+que el dueño amplió a mano). nucleo/grafo.py se dividió: el grafo se fue con
+Alejandro y `responder()` quedó en nucleo/ejecucion.py (nombre honesto: ya no
+construye grafos, ejecuta cualquiera). `responder(mensaje, thread_id, grafo)`
+ahora exige el grafo: nucleo/ no puede tener default de un bot porque NO debe
+importar de bots/ (regla de dependencias: nucleo ← bots ← interfaces).
+ver_grafo.py acepta el bot como argumento (`poe graph daniela`).
+
+## 2026-07-06 — Exportación a Excel: script del dueño, no tool del bot
+`bots/daniela/exportar.py` + `poe exportar`: genera exports/daniela_<fecha>.xlsx
+con una hoja por categoría (openpyxl), orden cronológico y encabezados en
+negrita. Es un script y NO una tool a propósito: por WhatsApp el bot solo
+responde texto — mandar un archivo requeriría hostearlo en URL pública
+(anotado como mejora futura). El flujo real: el dueño corre `poe exportar` y
+le manda el archivo a Daniela.
+
+## 2026-07-06 — Audio (notas de voz): bloque "media" nativo de Gemini, sin STT aparte
+`mensaje_con_audio()` en nucleo/mensajes.py usa el bloque
+`{"type": "media", "mime_type", "data"}` — formato VERIFICADO leyendo la
+fuente de langchain-google-genai instalada (no adivinado). Registro
+`AUDIO = {"gemini"}` + `tiene_audio()` en nucleo/llm: Gemini es el único
+proveedor configurado que escucha audio nativo (Claude no acepta audio; el
+resto necesitaría transcripción previa, ej. Whisper vía Groq — anotado como
+alternativa). El webhook ahora distingue el adjunto por MediaContentType0
+(image/* → visión, audio/* → audio, otro → rechazo digno). Las notas de voz
+de WhatsApp llegan como audio/ogg.
+
+## 2026-07-06 — Datos de negocio en BD estructurada, NO en la memoria conversacional
+Consulta del dueño: ¿consultar registros "buscando en la memoria por fechas"
+o contra una BD? Decisión (ya implementada así en Daniela): la memoria del
+checkpointer es CONTEXTO conversacional — se recorta (ventana 8 h), es texto
+no estructurado y no sirve para agregar/filtrar con exactitud. Los datos de
+negocio viven en el almacén SQLite y se consultan vía TOOLS (fuente de
+verdad estructurada y exacta). Un endpoint HTTP intermedio (API aparte) solo
+se justificaría si la BD fuera remota/compartida con otros sistemas — hoy
+sería complejidad gratis.
+
+## 2026-07-06 — Segundo bot: "Daniela" (asistente de ventas telco) en bots/daniela/
+Primer bot con dominio real: reemplaza las 4 planillas Excel de Daniela
+(ejecutiva de ventas de telecomunicaciones) por conversación de WhatsApp.
+Tablas SQLite propias (`datos_daniela.sqlite`): ventas (mct, rut,
+conectado/agendado), pendientes (bajas, cambios domicilio, devoluciones),
+portabilidades en espera (rut, teléfono, compañía) y homepass. Diseño:
+- **Grafo mínimo** (agente puro): START → asistente → loop tools → END.
+  Sin router ni ramas: la complejidad vive en las TOOLS y el prompt, no en
+  el flujo. Contraste deliberado con Alejandro (didáctico).
+- **Temperatura 0.2** (vs 0.7-0.9 de Alejandro): registrar datos exige
+  precisión, no creatividad. El prompt prohíbe inventar valores y obliga a
+  pedir los datos faltantes antes de registrar.
+- **Capas separadas**: almacen.py (solo SQL, testeable sin API) ← tools.py
+  (validar/formatear) ← nodos.py (conversación). Whitelist de categorías
+  contra inyección SQL vía LLM.
+- **Convivencia de 2 bots**: `bots.obtener_bot(nombre)` (imports perezosos),
+  `responder(..., grafo=)` opcional (default Alejandro = retrocompatible),
+  webhook con 2 endpoints (`/whatsapp` y `/daniela`), memoria SQLite POR BOT
+  para que el mismo teléfono hable con ambos sin mezclar historiales.
+- Decisión explícita del dueño: son SOLO 2 bots — no generalizar a "N bots".
+  Pendiente acordado: mover lo de Alejandro de nucleo/ a bots/alejandro/
+  (primero WhatsApp funcionando, después la reorganización).
+
 ## 2026-07-06 — Bug real: el router se confundía con el mensaje del propio bot
 Al probar `saludo` de punta a punta, un primer mensaje "once" terminó yendo
 al nodo `chat` (LLM) en vez de `once` (fijo). Causa: el router miraba

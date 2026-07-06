@@ -10,9 +10,10 @@ Un nodo no está obligado a usar el LLM; es solo una función de Python.
 
 from langchain_core.messages import AIMessage, SystemMessage
 
+from bots.alejandro.tools import TOOLS
 from nucleo.config import llm
+from nucleo.limites import recortar_jornada
 from nucleo.state import State
-from nucleo.tools import TOOLS
 
 # Personalidad base de Alejandro (se usa en el nodo de chat).
 # La última frase es la "vacuna" anti-imitación: si el historial trae frases
@@ -51,7 +52,9 @@ def nodo_chat(state: State) -> dict:
     """
     temperatura = state.get("temperatura", TEMPERATURA_CHAT_DEFECTO)
     modelo = llm_con_tools.bind(temperature=temperatura)
-    respuesta = modelo.invoke([ALEJANDRO_SYSTEM] + state["messages"])
+    # recortar_jornada: al LLM solo se le envían las últimas 8 h de conversación
+    # (menos tokens = menos costo); la memoria completa sigue en el checkpointer.
+    respuesta = modelo.invoke([ALEJANDRO_SYSTEM] + recortar_jornada(state["messages"]))
     return {"messages": [respuesta]}
 
 
@@ -65,7 +68,7 @@ def nodo_broma(state: State) -> dict:
     )
     temperatura = state.get("temperatura", TEMPERATURA_BROMA_DEFECTO)
     modelo = llm.bind(temperature=temperatura)
-    respuesta = modelo.invoke([instruccion] + state["messages"])
+    respuesta = modelo.invoke([instruccion] + recortar_jornada(state["messages"]))
     return {"messages": [respuesta]}
 
 

@@ -1,22 +1,23 @@
 """
 Punto de entrada del proyecto.
 
+Uso:
+    python main.py             -> chatea con Alejandro (default)
+    python main.py daniela     -> chatea con la asistente de Daniela
+
 Estructura (arquitectura Ports & Adapters):
 
-    nucleo/        <- la lógica del bot (no sabe si es CLI o WhatsApp)
-      config.py    <- crea el LLM (lee .env)
-      state.py     <- el State
-      nodos.py     <- nodo_chat, nodo_broma, nodo_once, nodo_flojera
-      router.py    <- la lógica de decisión (arista condicional)
-      grafo.py     <- arma y compila el grafo
-    interfaces/    <- adaptadores que hablan con el nucleo
-      cli.py       <- bucle de terminal
-      whatsapp.py  <- (futuro) webhook
+    nucleo/        <- plataforma compartida (LLM, State, protecciones) + Alejandro
+    bots/daniela/  <- el bot de Daniela (almacén, tools, nodo, grafo)
+    interfaces/    <- adaptadores: cli.py (terminal) y whatsapp.py (webhook)
 
 Regla de oro: nucleo/ NUNCA importa de interfaces/. Solo al revés.
 """
 
+import sys
+
 from interfaces.cli import iniciar_cli
 
 if __name__ == "__main__":
-    iniciar_cli()
+    bot = sys.argv[1] if len(sys.argv) > 1 else "alejandro"
+    iniciar_cli(bot)

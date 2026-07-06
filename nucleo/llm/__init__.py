@@ -9,7 +9,7 @@ import os
 
 from langchain_core.language_models import BaseChatModel
 
-from nucleo.llm.proveedores import PROVEEDORES, VISION
+from nucleo.llm.proveedores import AUDIO, PROVEEDORES, VISION
 
 
 def nombre_proveedor() -> str:
@@ -28,3 +28,8 @@ def crear_llm() -> BaseChatModel:
 def tiene_vision() -> bool:
     """True si el proveedor activo puede interpretar imágenes."""
     return nombre_proveedor() in VISION
+
+
+def tiene_audio() -> bool:
+    """True si el proveedor activo puede escuchar audio (notas de voz)."""
+    return nombre_proveedor() in AUDIO

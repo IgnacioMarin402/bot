@@ -4,23 +4,19 @@ Actualizar al terminar cada hito (mover a "Hecho" con fecha).
 
 ## Siguiente
 
-1. **Endurecer webhook para producción** — validar firma `X-Twilio-Signature`.
-2. **Router de impedimentos → clasificador con LLM** (opcional, si la lista de
-   `patrones_impedimento` se queda corta): un nodo previo que le pregunte al
-   LLM "¿esto es un impedimento sí/no?" en vez de matching por frases fijas.
-   Trade-off: una llamada extra por mensaje (costo/latencia) a cambio de
-   generalizar mejor. Ver nucleo/router.py.
-3. **Multi-bot por ruta** (idea del usuario, 2026-07-06): un solo servidor
-   FastAPI, pero el webhook elige QUÉ grafo invocar según el número de
-   destino (`To` del payload Twilio) o un prefijo del mensaje. Cada "bot" es
-   su propio grafo — no requiere rehacer nada, solo un nivel de selección
-   arriba de `obtener_grafo()`.
-4. (Opcional, si el bot pasa a "producción") Remitente propio de WhatsApp:
-   número + verificación Meta Business → permite foto/nombre de perfil, y
-   habilita más modelos de tools de pago. En sandbox NO se puede (número
-   compartido de Twilio). Alternativa de infraestructura: VPS barato
-   (Oracle free tier / Hetzner ~€4) reemplazando a ngrok para que el bot no
-   dependa de que el laptop esté prendido.
+1. **Segundo número de Twilio** (en curso por el dueño, 2026-07-06): con dos
+   números, cada uno apunta a su URL (`/whatsapp` y `/daniela`) y ambos bots
+   viven a la vez. Configurar el webhook de cada número en Twilio.
+2. **Daniela v2** (después de que Daniela lo pruebe de verdad):
+   - Marcar pendientes como resueltos / editar registros.
+   - Enviar el Excel por WhatsApp (requiere hostear el archivo en URL pública
+     y responder TwiML con <Media>).
+3. **Endurecer webhook para producción** — validar firma `X-Twilio-Signature`
+   (más importante ahora: hay datos reales de clientes en datos_daniela.sqlite).
+4. **Router de impedimentos → clasificador con LLM** (opcional, si la lista de
+   `patrones_impedimento` se queda corta). Ver bots/alejandro/router.py.
+5. (Producción) VPS barato (Oracle free / Hetzner ~€4) reemplazando a ngrok;
+   con números propios, enrutar por campo `To` si se prefiere un solo endpoint.
 
 ## Rutina para levantar WhatsApp (recordatorio)
 
@@ -28,9 +24,13 @@ Actualizar al terminar cada hito (mover a "Hecho" con fecha).
 uv run poe dev-watch   # terminal 1
 ngrok http 8000        # terminal 2 -> URL nueva cada vez
 ```
-Pegar `https://<url-ngrok>/whatsapp` (¡CON /whatsapp!) en Twilio → Sandbox
-settings → "When a message comes in" (POST). El join del sandbox expira cada
-72h: reenviar `join <código>` al +1 415 523 8886.
+Pegar en Twilio → Sandbox settings → "When a message comes in" (POST):
+- `https://<url-ngrok>/whatsapp` para hablar con ALEJANDRO, o
+- `https://<url-ngrok>/daniela` para la asistente de DANIELA.
+(El sandbox tiene UN solo número → un bot activo a la vez; se cambia
+re-pegando la URL. Con números propios de producción, cada bot tendría el
+suyo.) El join del sandbox expira cada 72h: reenviar `join <código>` al
++1 415 523 8886.
 
 Para probar **imágenes**: `LLM_PROVIDER=gemini` (o `claude`) en `.env`, más
 `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN` (dashboard de Twilio → Account Info).
@@ -52,6 +52,28 @@ Para probar **imágenes**: `LLM_PROVIDER=gemini` (o `claude`) en `.env`, más
 
 ## Hecho
 
+- 2026-07-06: **Refactor de carpetas** — Alejandro movido a `bots/alejandro/`
+  (lista de impedimentos del dueño preservada); `nucleo/` quedó como
+  plataforma pura con `ejecucion.py::responder(mensaje, thread_id, grafo)`.
+  Regla de dependencias: nucleo ← bots ← interfaces. `poe graph <bot>`.
+- 2026-07-06: **Exportación a Excel** — `poe exportar` genera
+  exports/daniela_<fecha>.xlsx (una hoja por categoría, openpyxl). Probado
+  end-to-end: insertar → exportar → releer.
+- 2026-07-06: **Notas de voz** — `mensaje_con_audio()` (bloque "media" de
+  Gemini, formato verificado en la fuente de la librería), `tiene_audio()`
+  (`AUDIO={"gemini"}`), webhook distingue image/audio/otro por content-type
+  con rechazos dignos. Requiere `LLM_PROVIDER=gemini`.
+- 2026-07-06: 🤖🤖 **SEGUNDO BOT: DANIELA** — asistente de ventas telco en
+  `bots/daniela/` (almacén SQLite + 6 tools + agente puro sin router).
+  Webhook con dos endpoints: `/whatsapp` (Alejandro) y `/daniela`. CLI:
+  `poe dev-daniela`. `responder()` ahora acepta `grafo=` (default Alejandro).
+  Memorias separadas por bot. Probado offline: almacén, tools, ambos grafos,
+  regresión de Alejandro y ambos endpoints en el mismo servidor.
+- 2026-07-06: **Protecciones anti-abuso** (`nucleo/limites.py`): rate limit
+  10 msg/min por thread_id (ventana deslizante), tope de 10.000 caracteres,
+  y ventana de jornada de 8 h (el LLM solo ve los mensajes recientes; la
+  memoria completa sigue en SQLite). Aplicadas en `responder()` antes de
+  invocar el grafo; los rechazos responden texto fijo sin tocar el historial.
 - 2026-07-06: **Nodo `saludo` + multi-mensaje** — presentación fija en el
   primer mensaje de cada `thread_id` (`router_entrada`/`es_primera_vez` en
   `nucleo/router.py`), seguida de la respuesta real (saludo → re-evalúa

@@ -11,8 +11,9 @@ checkpointer), no solo el código.
 
 ```powershell
 uv sync                # instalar dependencias (desde uv.lock)
-uv run poe dev         # correr el bot en terminal (CLI)
-uv run poe prod        # servidor web WhatsApp (interfaces/whatsapp.py)
+uv run poe dev         # Alejandro en terminal (CLI)
+uv run poe dev-daniela # asistente de Daniela en terminal
+uv run poe prod        # servidor web WhatsApp (ambos bots: /whatsapp y /daniela)
 uv run poe dev-watch   # servidor web con auto-reload
 uv run poe lint        # ruff check
 uv run poe format      # ruff format
@@ -22,34 +23,42 @@ uv run poe graph       # dibujar el grafo (Mermaid + PNG)
 Smoke test sin gastar API (keys dummy):
 
 ```powershell
-$env:OPENROUTER_API_KEY = "dummy"; uv run python -c "from nucleo.grafo import obtener_grafo; obtener_grafo(); print('OK')"
+$env:OPENROUTER_API_KEY = "dummy"; uv run python -c "from bots import obtener_bot; obtener_bot('alejandro'); obtener_bot('daniela'); print('OK')"
 ```
 
 ## Arquitectura (Ports & Adapters) — reglas duras
 
 ```
-main.py          → punto de entrada (mínimo, solo delega)
-nucleo/          → lógica del bot. NO sabe de CLI ni WhatsApp
+main.py          → punto de entrada: python main.py [alejandro|daniela]
+nucleo/          → PLATAFORMA compartida (no sabe de bots ni interfaces)
   config.py      → único lugar que expone `llm` (ya inyectado)
   llm/           → puerto+adaptadores del modelo (proveedores.py + crear_llm)
-                   también: nombre_proveedor(), tiene_vision()
+                   también: nombre_proveedor(), tiene_vision(), tiene_audio()
   state.py       → State (TypedDict + reducers + campos opcionales)
-  nodos.py       → nodos del grafo
-  router.py      → aristas condicionales
-  tools.py       → funciones @tool que el LLM puede pedir ejecutar
-  mensajes.py    → construcción de mensajes multimodales (texto+imagen)
-  grafo.py       → ensambla y compila; expone `obtener_grafo()` y `responder()`
-interfaces/      → adaptadores de entrada (cli.py, whatsapp.py)
+  mensajes.py    → mensajes multimodales (texto+imagen+audio)
+  limites.py     → protecciones: rate limit, tope de largo, ventana de jornada
+  ejecucion.py   → responder(mensaje, thread_id, grafo) — usado por interfaces
+bots/            → registro `obtener_bot(nombre)`; un paquete por bot
+  alejandro/     → nodos, router, tools, grafo (memoria.sqlite)
+  daniela/       → asistente ventas telco: almacen.py (datos_daniela.sqlite),
+                   tools, nodos, grafo (agente puro, sin router), exportar.py
+interfaces/      → adaptadores de entrada (cli.py, whatsapp.py — /whatsapp y /daniela)
 memory/          → memoria del proyecto (decisiones y roadmap)
 ```
 
-1. **`nucleo/` NUNCA importa de `interfaces/`.** Solo al revés.
-2. Las interfaces consumen únicamente `responder()` (o `obtener_grafo()` si
-   necesitan algo más fino, ej. `get_state()`) de `nucleo.grafo` — y mensajes
-   de `langchain_core`. Nada de nodos/router directo. **Importar módulos no
-   debe hacer I/O** (crear archivos, abrir conexiones, llamar red): el grafo
-   es un singleton perezoso vía `lru_cache`. Validar config/keys al importar
-   sí está permitido (fail fast, sin I/O).
+Son DOS bots (Alejandro y Daniela) — no generalizar a "N bots" sin necesidad.
+Cada bot tiene memoria SQLite propia (memoria.sqlite / memoria_daniela.sqlite)
+para que el mismo teléfono hable con ambos sin mezclar historiales.
+Dependencias: `nucleo/` no importa de `bots/` ni `interfaces/`; `bots/` no
+importa de `interfaces/`; `interfaces/` usa `obtener_bot()` + `responder()`.
+
+1. **`nucleo/` NUNCA importa de `bots/` ni de `interfaces/`.** Solo al revés.
+2. Las interfaces consumen únicamente `obtener_bot()` (de `bots`) +
+   `responder()` (de `nucleo.ejecucion`) — y mensajes de `langchain_core`.
+   Nada de nodos/router directo. **Importar módulos no debe hacer I/O**
+   (crear archivos, abrir conexiones, llamar red): cada grafo es un singleton
+   perezoso vía `lru_cache`. Validar config/keys al importar sí está
+   permitido (fail fast, sin I/O).
 3. **El LLM solo se instancia en `nucleo/llm/proveedores.py`.** El resto del
    código lo obtiene con `from nucleo.config import llm`. Prohibido crear
    `ChatXxx(...)` en otro lado. Para variar parámetros por nodo/conversación
@@ -66,7 +75,11 @@ memory/          → memoria del proyecto (decisiones y roadmap)
    **del usuario** (`HumanMessage`), no `state["messages"][-1]` a secas — si
    un nodo previo en el mismo turno ya agregó su propia respuesta (ej.
    `saludo`), el último mensaje sería del bot, no del usuario. Ver
-   `nucleo/router.py::_ultimo_mensaje_usuario` y la decisión 2026-07-06.
+   `bots/alejandro/router.py::_ultimo_mensaje_usuario` y la decisión 2026-07-06.
+9. **Protecciones antes que el grafo**: rate limit y tope de largo se aplican
+   en `responder()` ANTES de invocar (rechazar barato y temprano), y sus
+   rechazos responden texto fijo SIN guardarse en el historial (evita costo
+   y contaminación de contexto). Ver `nucleo/limites.py`.
 
 ## Clean code del proyecto
 
@@ -84,16 +97,21 @@ memory/          → memoria del proyecto (decisiones y roadmap)
 
 ## Recetas
 
-**Añadir un nodo:** función en `nucleo/nodos.py` → decidir cuándo se activa en
-`nucleo/router.py` → registrarlo en `nucleo/grafo.py` (add_node + mapa de
+**Añadir un nodo:** función en `bots/<bot>/nodos.py` → decidir cuándo se activa
+(router del bot) → registrarlo en `bots/<bot>/grafo.py` (add_node + mapa de
 conditional edges + edge a END) → probar el router en aislamiento.
 
 **Añadir un proveedor de LLM:** función adaptador en `nucleo/llm/proveedores.py`
 + línea en `PROVEEDORES` → documentar la key en `.env.example` → dependencia
 con `uv add langchain-<proveedor>`.
 
-**Añadir una interfaz:** archivo nuevo en `interfaces/` que importe
-`responder()` de `nucleo.grafo`. No tocar `nucleo/`.
+**Añadir una interfaz:** archivo nuevo en `interfaces/` que use
+`obtener_bot()` de `bots` + `responder()` de `nucleo.ejecucion`. No tocar `nucleo/`.
+
+**Añadir un bot:** carpeta en `bots/<nombre>/` con sus nodos/tools/grafo
+(reutilizando `nucleo.config.llm`, `nucleo.state`, `nucleo.limites`) → rama en
+`bots.obtener_bot()` → endpoint en `interfaces/whatsapp.py` + tarea `poe` si
+aplica. Memoria SQLite propia por bot.
 
 ## Memoria del proyecto (`memory/`)
 

@@ -9,8 +9,9 @@ __pycache__/
 *.pyc
 .ruff_cache/
 
-# Memoria persistente del bot (conversaciones) + archivos WAL de SQLite
-memoria.sqlite*
+# Bases SQLite de los bots (memorias + datos de Daniela) + archivos WAL
+*.sqlite*
 
-# Artefactos generados (se recrean con: uv run poe graph)
-grafo.png
+# Artefactos generados (se recrean con: uv run poe graph / poe exportar)
+grafo*.png
+exports/

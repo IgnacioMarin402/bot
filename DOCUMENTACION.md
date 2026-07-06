@@ -45,21 +45,44 @@ graph/
 ├── memory/                  # Memoria del PROYECTO (humanos)
 │   ├── decisiones.md
 │   └── roadmap.md
-├── nucleo/                  # ❤️ La lógica del bot
+├── nucleo/                  # ❤️ PLATAFORMA compartida (no sabe de bots ni interfaces)
 │   ├── config.py
 │   ├── llm/
-│   │   ├── __init__.py      # crear_llm(), nombre_proveedor(), tiene_vision()
-│   │   └── proveedores.py   # los adaptadores de cada IA + registro VISION
+│   │   ├── __init__.py      # crear_llm(), nombre_proveedor(), tiene_vision/audio()
+│   │   └── proveedores.py   # adaptadores de cada IA + registros VISION y AUDIO
 │   ├── state.py
-│   ├── nodos.py
-│   ├── router.py
-│   ├── tools.py             # funciones que el LLM puede pedir ejecutar
-│   ├── mensajes.py          # construcción de mensajes multimodales (texto+imagen)
-│   └── grafo.py
+│   ├── mensajes.py          # mensajes multimodales (texto + imagen + audio)
+│   ├── limites.py           # protecciones: rate limit, tope de largo, jornada 8h
+│   └── ejecucion.py         # responder(mensaje, thread_id, grafo) — para interfaces
+├── bots/                    # 🤖 registro obtener_bot(); un paquete por bot
+│   ├── alejandro/           # el bot original (didáctico)
+│   │   ├── nodos.py         #   5 nodos (chat con tools, broma, once, flojera, saludo)
+│   │   ├── router.py        #   aristas condicionales (once/broma/impedimentos)
+│   │   ├── tools.py         #   hora_actual, tirar_dado
+│   │   └── grafo.py         #   router + saludo + loop tools (memoria.sqlite)
+│   └── daniela/             # asistente de ventas telco (2º bot, 2026-07-06)
+│       ├── almacen.py       #   los "4 Excel" como tablas SQLite (datos_daniela.sqlite)
+│       ├── tools.py         #   registrar/listar/buscar (el LLM extrae los datos)
+│       ├── nodos.py         #   un solo asistente, temperatura 0.2 (precisión)
+│       ├── grafo.py         #   agente puro: asistente ⇄ tools, sin router
+│       └── exportar.py      #   poe exportar -> exports/daniela_<fecha>.xlsx
 └── interfaces/              # 🔌 Las puertas de entrada
-    ├── cli.py               # terminal
-    └── whatsapp.py          # webhook Twilio (texto e imágenes)
+    ├── cli.py               # terminal (python main.py [alejandro|daniela])
+    └── whatsapp.py          # webhook Twilio: POST /whatsapp (Alejandro) y /daniela
 ```
+
+> **Nota (2026-07-06):** las secciones siguientes que mencionan
+> `nucleo/nodos.py`, `nucleo/router.py`, `nucleo/tools.py` o "el grafo en
+> nucleo/grafo.py" describen archivos que HOY viven en `bots/alejandro/`
+> (mismo contenido, nueva casa). `responder()` vive en `nucleo/ejecucion.py`.
+
+> **Dos bots, una plataforma:** Daniela reutiliza de `nucleo/` el LLM
+> multi-proveedor, el State, las protecciones y `responder()` — solo define
+> su dominio (tools + prompt + grafo mínimo). Cada bot tiene su memoria
+> SQLite propia, así el mismo teléfono habla con ambos sin mezclar
+> historiales. Su grafo es deliberadamente simple (sin router): la
+> complejidad está en las tools, no en el flujo — no todo bot necesita las
+> ramas de Alejandro.
 
 ### `main.py` — el punto de entrada
 
@@ -148,6 +171,34 @@ un detalle de cómo se le habla al LLM (LangChain), no de WhatsApp. Si mañana
 existe una interfaz de Telegram, reutiliza esta misma función — solo cambia
 CÓMO consigue los bytes de la imagen (eso sí es responsabilidad de cada
 interfaz).
+
+#### `nucleo/limites.py` — protecciones anti-abuso (2026-07-06)
+
+**Qué hace:** tres defensas para que un usuario no queme la cuota de API:
+
+| Protección | Regla | Qué pasa si se viola |
+|---|---|---|
+| Rate limit | 10 mensajes/min por `thread_id` (ventana deslizante) | Respuesta fija "Calma po..." sin LLM |
+| Tope de largo | Máximo 10.000 caracteres de texto | Respuesta fija "¿la biblia?..." sin LLM |
+| Ventana de jornada | El LLM solo VE las últimas 8 h de conversación | (transparente — no es un rechazo) |
+
+**Por qué así:** el principio es **rechazar lo más barato posible, lo más
+temprano posible** — un `if` en `responder()` cuesta nanosegundos; la llamada
+al LLM cuesta plata y segundos. Los rechazos **no se guardan en el
+historial** (lección de la contaminación de contexto). El orden importa: el
+tope de largo se chequea antes que el rate limit, para que un mensaje
+gigante rechazado no consuma cupo.
+
+La **ventana de jornada** ataca un costo invisible: como el checkpointer
+acumula todo, cada turno re-envía el historial COMPLETO al LLM — el costo
+crece para siempre. `recortar_jornada()` corta lo que se envía (no lo que se
+guarda: la memoria en SQLite queda entera). Como los mensajes de LangChain
+no traen timestamp, `responder()` estampa cada mensaje entrante
+(`additional_kwargs["marca_tiempo"]`, persistido por el checkpointer). El
+corte siempre empieza en un `HumanMessage` para no dejar respuestas
+"huérfanas" al inicio del contexto. Rate limit en memoria del proceso
+(dict + deque + `Lock`, porque FastAPI atiende en hilos); producción
+multi-proceso usaría Redis.
 
 #### `nucleo/router.py` — la arista condicional
 

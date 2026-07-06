@@ -31,3 +31,21 @@ def mensaje_con_imagen(texto: str, imagen_bytes: bytes, mime_type: str) -> Human
             {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
         ]
     )
+
+
+def mensaje_con_audio(texto: str, audio_bytes: bytes, mime_type: str) -> HumanMessage:
+    """Arma un HumanMessage con texto + un audio en base64 (ej. nota de voz).
+
+    Usa el bloque "media" (formato de langchain-google-genai, verificado en
+    la fuente de la librería): Gemini "escucha" el audio nativo — transcribe
+    e interpreta sin OCR/STT aparte. Es el ÚNICO de nuestros proveedores con
+    audio de entrada; el llamador debe chequear antes con `tiene_audio()`.
+    Las notas de voz de WhatsApp llegan como audio/ogg.
+    """
+    b64 = base64.b64encode(audio_bytes).decode("utf-8")
+    return HumanMessage(
+        content=[
+            {"type": "text", "text": texto or "Escucha este audio y responde a lo que dice."},
+            {"type": "media", "mime_type": mime_type, "data": b64},
+        ]
+    )
