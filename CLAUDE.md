@@ -12,8 +12,8 @@ checkpointer), no solo el código.
 ```powershell
 uv sync                # instalar dependencias (desde uv.lock)
 uv run poe dev         # Alejandro en terminal (CLI)
-uv run poe dev-daniela # asistente de Daniela en terminal
-uv run poe prod        # servidor web WhatsApp (ambos bots: /whatsapp y /daniela)
+uv run poe dev-julieta # asistente de Daniela en terminal
+uv run poe prod        # servidor web WhatsApp (ambos bots: /whatsapp y /julieta)
 uv run poe dev-watch   # servidor web con auto-reload
 uv run poe lint        # ruff check
 uv run poe format      # ruff format
@@ -23,13 +23,13 @@ uv run poe graph       # dibujar el grafo (Mermaid + PNG)
 Smoke test sin gastar API (keys dummy):
 
 ```powershell
-$env:OPENROUTER_API_KEY = "dummy"; uv run python -c "from bots import obtener_bot; obtener_bot('alejandro'); obtener_bot('daniela'); print('OK')"
+$env:OPENROUTER_API_KEY = "dummy"; uv run python -c "from bots import obtener_bot; obtener_bot('alejandro'); obtener_bot('julieta'); print('OK')"
 ```
 
 ## Arquitectura (Ports & Adapters) — reglas duras
 
 ```
-main.py          → punto de entrada: python main.py [alejandro|daniela]
+main.py          → punto de entrada: python main.py [alejandro|julieta]
 nucleo/          → PLATAFORMA compartida (no sabe de bots ni interfaces)
   config.py      → único lugar que expone `llm` (ya inyectado)
   llm/           → puerto+adaptadores del modelo (proveedores.py + crear_llm)
@@ -40,14 +40,14 @@ nucleo/          → PLATAFORMA compartida (no sabe de bots ni interfaces)
   ejecucion.py   → responder(mensaje, thread_id, grafo) — usado por interfaces
 bots/            → registro `obtener_bot(nombre)`; un paquete por bot
   alejandro/     → nodos, router, tools, grafo (memoria.sqlite)
-  daniela/       → asistente ventas telco: almacen.py (datos_daniela.sqlite),
+  julieta/       → asistente ventas telco: almacen.py (datos_julieta.sqlite),
                    tools, nodos, grafo (agente puro, sin router), exportar.py
-interfaces/      → adaptadores de entrada (cli.py, whatsapp.py — /whatsapp y /daniela)
+interfaces/      → adaptadores de entrada (cli.py, whatsapp.py — /whatsapp y /julieta)
 memory/          → memoria del proyecto (decisiones y roadmap)
 ```
 
-Son DOS bots (Alejandro y Daniela) — no generalizar a "N bots" sin necesidad.
-Cada bot tiene memoria SQLite propia (memoria.sqlite / memoria_daniela.sqlite)
+Son DOS bots (Alejandro y Julieta) — no generalizar a "N bots" sin necesidad.
+Cada bot tiene memoria SQLite propia (memoria.sqlite / memoria_julieta.sqlite)
 para que el mismo teléfono hable con ambos sin mezclar historiales.
 Dependencias: `nucleo/` no importa de `bots/` ni `interfaces/`; `bots/` no
 importa de `interfaces/`; `interfaces/` usa `obtener_bot()` + `responder()`.
@@ -80,6 +80,14 @@ importa de `interfaces/`; `interfaces/` usa `obtener_bot()` + `responder()`.
    en `responder()` ANTES de invocar (rechazar barato y temprano), y sus
    rechazos responden texto fijo SIN guardarse en el historial (evita costo
    y contaminación de contexto). Ver `nucleo/limites.py`.
+10. **Tools que necesitan el `thread_id`** (ej. saber a qué usuario pertenece
+    algo) declaran un parámetro `config: RunnableConfig` — LangChain lo
+    inyecta solo, y el LLM NO lo ve en el schema (no es un argumento que el
+    modelo decida). Ver `bots/julieta/tools.py::guardar_nombre`.
+11. **Eliminar es peligroso, actualizar no**: toda tool que borre datos debe
+    exigir confirmación explícita del usuario en el prompt/regla del sistema
+    ANTES de llamarla (mostrar el registro, preguntar, esperar el "sí").
+    Actualizar puede ir directo, pero confirmando el cambio en la respuesta.
 
 ## Clean code del proyecto
 

@@ -1,5 +1,6 @@
 """
-ALMACÉN de datos de Daniela: los 4 "Excel" convertidos en tablas SQLite.
+ALMACÉN de datos de Julieta: los 4 "Excel" de Daniela convertidos en tablas
+SQLite, más el registro de usuarios (número -> nombre).
 
 | Tabla          | Reemplaza al Excel de...                                   |
 |----------------|------------------------------------------------------------|
@@ -7,6 +8,7 @@ ALMACÉN de datos de Daniela: los 4 "Excel" convertidos en tablas SQLite.
 | pendientes     | bajas incompletas, cambios de domicilio, devolución equipos |
 | portabilidades | clientes esperando portar (boleta con otra cía / faltan días)|
 | homepass       | creaciones de homepass solicitadas a soporte                |
+| usuarios       | número de teléfono -> nombre (para saludar por su nombre)   |
 
 Diseño: conexión POR OPERACIÓN (abrir → operar → cerrar). Es lo más simple y
 seguro con FastAPI atendiendo en varios hilos: cero estado compartido, cero
@@ -22,7 +24,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-RUTA_DATOS = Path(__file__).resolve().parents[2] / "datos_daniela.sqlite"
+RUTA_DATOS = Path(__file__).resolve().parents[2] / "datos_julieta.sqlite"
 
 _ESQUEMA = """
 CREATE TABLE IF NOT EXISTS ventas (
@@ -54,11 +56,26 @@ CREATE TABLE IF NOT EXISTS homepass (
     detalle TEXT NOT NULL,
     creado TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS usuarios (
+    telefono TEXT PRIMARY KEY,     -- el thread_id de WhatsApp (ej. "whatsapp:+569...")
+    nombre TEXT NOT NULL,
+    creado TEXT NOT NULL
+);
 """
 
-# Categorías válidas para listar/buscar. Whitelist: el nombre de tabla jamás
-# se interpola desde texto libre (evita inyección SQL vía el LLM).
+# Categorías válidas para listar/buscar/actualizar/eliminar. Whitelist: el
+# nombre de tabla jamás se interpola desde texto libre (evita inyección SQL
+# vía el LLM, que es quien decide los argumentos de estas funciones).
 CATEGORIAS = ("ventas", "pendientes", "portabilidades", "homepass")
+
+# Columnas editables por categoría (whitelist igual que CATEGORIAS: ni `id`
+# ni `creado` son editables — son identidad/auditoría, no datos de negocio).
+CAMPOS_EDITABLES = {
+    "ventas": ("mct", "rut", "estado", "fecha_agendada"),
+    "pendientes": ("tipo", "detalle", "mct", "rut"),
+    "portabilidades": ("rut", "telefono", "compania", "motivo"),
+    "homepass": ("detalle",),
+}
 
 
 def _conectar() -> sqlite3.Connection:
@@ -133,3 +150,52 @@ def buscar_por_rut(rut: str) -> dict[str, list[dict]]:
             if filas:
                 resultado[tabla] = [dict(f) for f in filas]
     return resultado
+
+
+def actualizar(categoria: str, id_registro: int, campo: str, valor: str) -> bool:
+    """Cambia UN campo de UN registro. True si el registro existía.
+
+    `categoria` y `campo` se validan contra whitelists (CATEGORIAS,
+    CAMPOS_EDITABLES) — nunca se interpolan directo desde lo que decide el LLM.
+    """
+    if categoria not in CATEGORIAS:
+        raise ValueError(f"Categoría '{categoria}' no existe. Opciones: {CATEGORIAS}")
+    if campo not in CAMPOS_EDITABLES[categoria]:
+        raise ValueError(
+            f"Campo '{campo}' no es editable en {categoria}. Opciones: {CAMPOS_EDITABLES[categoria]}"
+        )
+    with _conectar() as c:
+        cursor = c.execute(
+            f"UPDATE {categoria} SET {campo} = ? WHERE id = ?",  # noqa: S608 (whitelist)
+            (valor, id_registro),
+        )
+        return cursor.rowcount > 0
+
+
+def eliminar(categoria: str, id_registro: int) -> bool:
+    """Borra UN registro por id. True si existía (y se borró)."""
+    if categoria not in CATEGORIAS:
+        raise ValueError(f"Categoría '{categoria}' no existe. Opciones: {CATEGORIAS}")
+    with _conectar() as c:
+        cursor = c.execute(
+            f"DELETE FROM {categoria} WHERE id = ?",  # noqa: S608 (whitelist)
+            (id_registro,),
+        )
+        return cursor.rowcount > 0
+
+
+def obtener_nombre(telefono: str) -> str | None:
+    """El nombre guardado para este número, o None si nunca lo dio."""
+    with _conectar() as c:
+        fila = c.execute("SELECT nombre FROM usuarios WHERE telefono = ?", (telefono,)).fetchone()
+        return fila[0] if fila else None
+
+
+def guardar_nombre(telefono: str, nombre: str) -> None:
+    """Guarda (o reemplaza) el nombre asociado a un número de teléfono."""
+    with _conectar() as c:
+        c.execute(
+            "INSERT INTO usuarios (telefono, nombre, creado) VALUES (?, ?, ?) "
+            "ON CONFLICT(telefono) DO UPDATE SET nombre = excluded.nombre",
+            (telefono, nombre, _ahora()),
+        )

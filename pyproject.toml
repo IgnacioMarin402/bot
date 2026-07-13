@@ -40,13 +40,13 @@ package = false
 # ---------------------------------------------------------------------------
 [tool.poe.tasks]
 dev = { cmd = "python main.py", help = "Corre a Alejandro en la terminal (CLI)" }
-dev-daniela = { cmd = "python main.py daniela", help = "Corre a la asistente de Daniela en la terminal" }
+dev-julieta = { cmd = "python main.py julieta", help = "Corre a Julieta (asistente de Daniela) en la terminal" }
 prod = { cmd = "uvicorn interfaces.whatsapp:app --host 0.0.0.0 --port 8000", help = "Servidor web (WhatsApp). Requiere interfaces/whatsapp.py (próximo paso)" }
 dev-watch = { cmd = "uvicorn interfaces.whatsapp:app --reload", help = "Servidor web con auto-reload al guardar. Requiere interfaces/whatsapp.py" }
 lint = { cmd = "ruff check .", help = "Revisa el código (linter)" }
 format = { cmd = "ruff format .", help = "Formatea el código" }
-graph = { cmd = "python ver_grafo.py", help = "Dibuja el grafo de un bot (mermaid + PNG); ej: poe graph daniela" }
-exportar = { cmd = "python -m bots.daniela.exportar", help = "Exporta los datos de Daniela a Excel (exports/)" }
+graph = { cmd = "python ver_grafo.py", help = "Dibuja el grafo de un bot (mermaid + PNG); ej: poe graph julieta" }
+exportar = { cmd = "python -m bots.julieta.exportar", help = "Exporta los datos de Julieta a Excel (exports/)" }
 
 # ---------------------------------------------------------------------------
 # Linter / formatter

@@ -1,0 +1,14 @@
+# Caddyfile — reverse proxy con HTTPS automático (Let's Encrypt).
+#
+# Instalación (ver deploy/GUIA.md, Fase 8):
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   (editar el dominio) y luego: sudo systemctl reload caddy
+#
+# Esto es TODO lo que Caddy necesita: con solo declarar el dominio, él
+# consigue y renueva el certificado solo, redirige http->https, y pasa el
+# tráfico a uvicorn en localhost. El equivalente en nginx son ~40 líneas
+# + certbot aparte — por eso Caddy para este proyecto.
+
+TU-DOMINIO.duckdns.org {
+	reverse_proxy 127.0.0.1:8000
+}

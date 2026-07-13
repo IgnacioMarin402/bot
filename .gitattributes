@@ -1,0 +1,5 @@
+# Archivos que se EJECUTAN en Linux deben viajar con fin de línea LF.
+# Si llegan con CRLF (formato Windows), bash falla en el servidor con
+# errores crípticos tipo: "\r: command not found".
+deploy/** text eol=lf
+*.sh text eol=lf

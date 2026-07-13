@@ -1,5 +1,5 @@
 """
-TOOLS de Daniela: el puente entre la conversación y el almacén.
+TOOLS de Julieta: el puente entre la conversación y el almacén.
 
 El LLM lee los docstrings para decidir cuándo llamar cada una y con qué
 argumentos (extrae mct/rut/etc. del mensaje natural de Daniela). Cada tool
@@ -7,11 +7,19 @@ devuelve un string de confirmación que el LLM usa para redactar su respuesta.
 
 Separación: las tools NO tocan SQL (eso es de almacen.py); solo validan,
 delegan y formatean.
+
+`RunnableConfig` en `guardar_nombre`: LangChain inyecta automáticamente el
+`config` de la invocación (que trae `thread_id`) en cualquier tool que declare
+un parámetro con ese tipo. El LLM NO lo ve ni lo decide — no aparece en el
+schema que se le manda (verificado: `tool.args` no incluye "config"). Así la
+tool sabe A QUIÉN pertenece el nombre sin que el modelo tenga que inventar
+o pedir el número de teléfono (que ya tenemos gratis del thread_id).
 """
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from bots.daniela import almacen
+from bots.julieta import almacen
 
 
 @tool
@@ -70,7 +78,8 @@ def listar_registros(categoria: str, limite: int = 10) -> str:
     """Muestra los últimos registros de una categoría.
 
     `categoria` debe ser una de: 'ventas', 'pendientes', 'portabilidades',
-    'homepass'. Úsala cuando Daniela pida ver, revisar o repasar lo guardado.
+    'homepass'. Úsala cuando Daniela pida ver, revisar o repasar lo guardado,
+    o cuando necesites el ID de un registro para actualizarlo o eliminarlo.
     """
     try:
         filas = almacen.listar(categoria, limite)
@@ -89,7 +98,8 @@ def listar_registros(categoria: str, limite: int = 10) -> str:
 def buscar_por_rut(rut: str) -> str:
     """Busca TODO lo asociado a un rut (ventas, pendientes y portabilidades).
 
-    Úsala cuando Daniela pregunte por un cliente específico.
+    Úsala cuando Daniela pregunte por un cliente específico, o para encontrar
+    el ID de un registro que quiera actualizar o eliminar.
     """
     resultado = almacen.buscar_por_rut(rut)
     if not resultado:
@@ -104,12 +114,73 @@ def buscar_por_rut(rut: str) -> str:
     return "\n".join(lineas)
 
 
+@tool
+def actualizar_registro(categoria: str, numero: int, campo: str, nuevo_valor: str) -> str:
+    """Cambia UN campo de UN registro ya guardado.
+
+    `categoria`: 'ventas', 'pendientes', 'portabilidades' u 'homepass'.
+    `numero`: el ID del registro (usa listar_registros o buscar_por_rut si
+    no lo tienes). `campo` según la categoría:
+    - ventas: mct, rut, estado, fecha_agendada
+    - pendientes: tipo, detalle, mct, rut
+    - portabilidades: rut, telefono, compania, motivo
+    - homepass: detalle
+
+    No hace falta pedir confirmación para actualizar — pero repite el
+    cambio hecho en tu respuesta para que Daniela lo confirme visualmente.
+    """
+    try:
+        existia = almacen.actualizar(categoria, numero, campo, nuevo_valor)
+    except ValueError as error:
+        return str(error)
+    if not existia:
+        return f"No encontré el #{numero} en {categoria}."
+    return f"{categoria} #{numero} actualizado: {campo} = {nuevo_valor}."
+
+
+@tool
+def eliminar_registro(categoria: str, numero: int) -> str:
+    """Elimina PERMANENTEMENTE un registro.
+
+    `categoria`: 'ventas', 'pendientes', 'portabilidades' u 'homepass'.
+    `numero`: el ID del registro.
+
+    IMPORTANTE: solo llama esta herramienta DESPUÉS de que Daniela confirme
+    explícitamente que quiere eliminar (ej. responda "sí" a tu pregunta de
+    confirmación). Antes de eso, muéstrale el registro (con listar_registros
+    o buscar_por_rut si hace falta) y pregunta si está segura. Nunca elimines
+    sin haber pedido y recibido esa confirmación en el mismo intercambio.
+    """
+    try:
+        existia = almacen.eliminar(categoria, numero)
+    except ValueError as error:
+        return str(error)
+    if not existia:
+        return f"No encontré el #{numero} en {categoria}."
+    return f"{categoria} #{numero} eliminado."
+
+
+@tool
+def guardar_nombre(nombre: str, config: RunnableConfig) -> str:
+    """Guarda el nombre de la persona con la que estás hablando.
+
+    Úsala apenas el usuario te diga su nombre (por ejemplo, respondiendo a tu
+    saludo inicial). No le pidas el número de teléfono: ya lo sabes.
+    """
+    telefono = config["configurable"]["thread_id"]
+    almacen.guardar_nombre(telefono, nombre)
+    return f"Nombre guardado: {nombre}."
+
+
 # Registro de tools del bot. Añadir una tool = escribirla arriba + sumarla aquí.
-TOOLS_DANIELA = [
+TOOLS_JULIETA = [
     registrar_venta,
     registrar_pendiente,
     registrar_portabilidad,
     registrar_homepass,
     listar_registros,
     buscar_por_rut,
+    actualizar_registro,
+    eliminar_registro,
+    guardar_nombre,
 ]

@@ -5,18 +5,28 @@ Actualizar al terminar cada hito (mover a "Hecho" con fecha).
 ## Siguiente
 
 1. **Segundo número de Twilio** (en curso por el dueño, 2026-07-06): con dos
-   números, cada uno apunta a su URL (`/whatsapp` y `/daniela`) y ambos bots
-   viven a la vez. Configurar el webhook de cada número en Twilio.
-2. **Daniela v2** (después de que Daniela lo pruebe de verdad):
-   - Marcar pendientes como resueltos / editar registros.
+   números, cada uno apunta a su URL (`/whatsapp` y `/julieta`) y ambos bots
+   viven a la vez. Configurar el webhook de cada número en Twilio. Ojo: el
+   número nuevo necesita WhatsApp habilitado (verificación Meta Business) —
+   si es un número solo-SMS no sirve directo.
+2. **Julieta v3** (después de que Daniela la pruebe de verdad):
    - Enviar el Excel por WhatsApp (requiere hostear el archivo en URL pública
-     y responder TwiML con <Media>).
+     y responder TwiML con `<Media>`).
+   - Editar el nombre guardado si se equivocó (hoy `guardar_nombre` ya
+     sobrescribe, pero no hay forma de pedir "cámbialo" explícitamente en el prompt).
 3. **Endurecer webhook para producción** — validar firma `X-Twilio-Signature`
-   (más importante ahora: hay datos reales de clientes en datos_daniela.sqlite).
+   (más importante ahora: pronto habrá datos reales de clientes en
+   datos_julieta.sqlite).
 4. **Router de impedimentos → clasificador con LLM** (opcional, si la lista de
    `patrones_impedimento` se queda corta). Ver bots/alejandro/router.py.
-5. (Producción) VPS barato (Oracle free / Hetzner ~€4) reemplazando a ngrok;
-   con números propios, enrutar por campo `To` si se prefiere un solo endpoint.
+5. **Desplegar en Hetzner** siguiendo `deploy/GUIA.md` (decisión tomada:
+   systemd + uv + Caddy + DuckDNS, sin Docker — ver decisiones 2026-07-06).
+   Pasos del dueño: repo privado en GitHub + push, cuenta Hetzner (Ashburn),
+   subdominio DuckDNS, y seguir la guía fase por fase. La validación de
+   `X-Twilio-Signature` (punto 3) debe entrar ANTES de datos reales.
+6. Después del VPS: migrar de Twilio a **Meta Cloud API** directo (más
+   barato) = nueva interfaz `interfaces/meta.py` (JSON distinto + handshake
+   GET de verificación); el grafo y las tools no se tocan.
 
 ## Rutina para levantar WhatsApp (recordatorio)
 
@@ -26,7 +36,7 @@ ngrok http 8000        # terminal 2 -> URL nueva cada vez
 ```
 Pegar en Twilio → Sandbox settings → "When a message comes in" (POST):
 - `https://<url-ngrok>/whatsapp` para hablar con ALEJANDRO, o
-- `https://<url-ngrok>/daniela` para la asistente de DANIELA.
+- `https://<url-ngrok>/julieta` para hablar con JULIETA (asistente de Daniela).
 (El sandbox tiene UN solo número → un bot activo a la vez; se cambia
 re-pegando la URL. Con números propios de producción, cada bot tendría el
 suyo.) El join del sandbox expira cada 72h: reenviar `join <código>` al
@@ -52,6 +62,19 @@ Para probar **imágenes**: `LLM_PROVIDER=gemini` (o `claude`) en `.env`, más
 
 ## Hecho
 
+- 2026-07-06: **Rename daniela → julieta + nombre por usuario + update/delete**
+  — `bots/daniela/` → `bots/julieta/` (git mv, historial preservado); BD
+  renombradas (`datos_julieta.sqlite`, `memoria_julieta.sqlite`); endpoint
+  `/julieta`, `poe dev-julieta`. Tabla `usuarios(telefono→nombre)`:
+  `router_entrada(state, config)` decide por el ALMACÉN (no por el mensaje)
+  si hace falta `nodo_saludo` (fijo, pide el nombre); tool `guardar_nombre`
+  recibe el `thread_id` vía `config: RunnableConfig` inyectado (invisible
+  para el LLM); `nodo_asistente` arma system prompt dinámico con/sin nombre.
+  Nuevas tools `actualizar_registro`/`eliminar_registro` con whitelist
+  `CAMPOS_EDITABLES`; eliminar exige confirmación explícita (regla de
+  prompt). Verificado offline: almacén, tools con config, router_entrada
+  (3 casos), end-to-end (saludo fijo sin gastar API), regresión Alejandro,
+  webhook con ambos endpoints.
 - 2026-07-06: **Refactor de carpetas** — Alejandro movido a `bots/alejandro/`
   (lista de impedimentos del dueño preservada); `nucleo/` quedó como
   plataforma pura con `ejecucion.py::responder(mensaje, thread_id, grafo)`.

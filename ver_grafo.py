@@ -1,6 +1,6 @@
 """Dibuja el grafo de un bot — en texto (Mermaid) y como PNG.
 
-Uso:  python ver_grafo.py [alejandro|daniela]   (default: alejandro)
+Uso:  python ver_grafo.py [alejandro|julieta]   (default: alejandro)
 """
 
 import sys

@@ -1,0 +1,31 @@
+# Unit de systemd para los bots de WhatsApp (Alejandro + Julieta).
+#
+# Instalación (ver deploy/GUIA.md, Fase 7):
+#   sudo cp deploy/bots.service /etc/systemd/system/bots.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now bots
+#
+# systemd cumple aquí el rol que cumpliría Docker + restart policy:
+# mantiene el proceso vivo (Restart=always), lo levanta al bootear el VPS
+# (WantedBy=multi-user.target) y captura los logs (journalctl -u bots).
+
+[Unit]
+Description=Bots de WhatsApp (Alejandro + Julieta) — FastAPI/uvicorn
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bots
+Group=bots
+# WorkingDirectory importa: load_dotenv() busca el .env aquí, y las rutas
+# de los .sqlite se resuelven relativas al proyecto.
+WorkingDirectory=/home/bots/graph
+# uvicorn escucha SOLO en localhost: el que da la cara a internet es Caddy
+# (reverse proxy con HTTPS). El firewall además bloquea el puerto 8000.
+ExecStart=/home/bots/.local/bin/uv run uvicorn interfaces.whatsapp:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

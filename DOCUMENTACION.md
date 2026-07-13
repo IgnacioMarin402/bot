@@ -60,15 +60,15 @@ graph/
 │   │   ├── router.py        #   aristas condicionales (once/broma/impedimentos)
 │   │   ├── tools.py         #   hora_actual, tirar_dado
 │   │   └── grafo.py         #   router + saludo + loop tools (memoria.sqlite)
-│   └── daniela/             # asistente de ventas telco (2º bot, 2026-07-06)
-│       ├── almacen.py       #   los "4 Excel" como tablas SQLite (datos_daniela.sqlite)
-│       ├── tools.py         #   registrar/listar/buscar (el LLM extrae los datos)
-│       ├── nodos.py         #   un solo asistente, temperatura 0.2 (precisión)
-│       ├── grafo.py         #   agente puro: asistente ⇄ tools, sin router
-│       └── exportar.py      #   poe exportar -> exports/daniela_<fecha>.xlsx
+│   └── julieta/              # asistente de Daniela, ventas telco (2º bot, 2026-07-06)
+│       ├── almacen.py       #   los "4 Excel" + usuarios (tel->nombre) en SQLite (datos_julieta.sqlite)
+│       ├── tools.py         #   registrar/listar/buscar/actualizar/eliminar/guardar_nombre
+│       ├── nodos.py         #   saludo fijo (1ª vez) + asistente, temperatura 0.2 (precisión)
+│       ├── grafo.py         #   router_entrada (por almacén) + asistente ⇄ tools
+│       └── exportar.py      #   poe exportar -> exports/julieta_<fecha>.xlsx
 └── interfaces/              # 🔌 Las puertas de entrada
-    ├── cli.py               # terminal (python main.py [alejandro|daniela])
-    └── whatsapp.py          # webhook Twilio: POST /whatsapp (Alejandro) y /daniela
+    ├── cli.py               # terminal (python main.py [alejandro|julieta])
+    └── whatsapp.py          # webhook Twilio: POST /whatsapp (Alejandro) y /julieta
 ```
 
 > **Nota (2026-07-06):** las secciones siguientes que mencionan
@@ -76,13 +76,26 @@ graph/
 > nucleo/grafo.py" describen archivos que HOY viven en `bots/alejandro/`
 > (mismo contenido, nueva casa). `responder()` vive en `nucleo/ejecucion.py`.
 
-> **Dos bots, una plataforma:** Daniela reutiliza de `nucleo/` el LLM
-> multi-proveedor, el State, las protecciones y `responder()` — solo define
-> su dominio (tools + prompt + grafo mínimo). Cada bot tiene su memoria
-> SQLite propia, así el mismo teléfono habla con ambos sin mezclar
-> historiales. Su grafo es deliberadamente simple (sin router): la
-> complejidad está en las tools, no en el flujo — no todo bot necesita las
-> ramas de Alejandro.
+> **Dos bots, una plataforma:** Julieta (la asistente de Daniela) reutiliza
+> de `nucleo/` el LLM multi-proveedor, el State, las protecciones y
+> `responder()` — solo define su dominio (tools + prompt + grafo mínimo).
+> Cada bot tiene su memoria SQLite propia, así el mismo teléfono habla con
+> ambos sin mezclar historiales. Su grafo es deliberadamente simple (casi
+> sin router): la complejidad está en las tools, no en el flujo — no todo
+> bot necesita las ramas de Alejandro.
+
+> **Nombre por usuario (2026-07-06):** `router_entrada` en
+> `bots/julieta/grafo.py` NO mira el contenido del mensaje (como el router
+> de Alejandro) — mira el ALMACÉN: si es el primer mensaje de un teléfono y
+> el almacén no tiene nombre guardado para él, va a `saludo` (fijo, pide el
+> nombre) y termina el turno. Cuando el usuario responde, `nodo_asistente`
+> arma un system prompt DINÁMICO (con o sin el nombre, según
+> `almacen.obtener_nombre()`) y, si el mensaje trae el nombre, la tool
+> `guardar_nombre` lo persiste. Esa tool recibe el teléfono sin que el LLM
+> lo decida: declara un parámetro `config: RunnableConfig` que LangChain
+> inyecta solo (con el `thread_id` de la invocación) y que NO aparece en el
+> schema que ve el modelo — mismo mecanismo que usan las aristas
+> condicionales para leer `config`.
 
 ### `main.py` — el punto de entrada
 

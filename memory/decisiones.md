@@ -232,3 +232,76 @@ el usuario preguntó. Fix: `_ultimo_mensaje_usuario()` busca hacia atrás el
 ser válido en cuanto hay más de un nodo antes de la decisión — cazado con un
 test end-to-end antes de que llegara a WhatsApp real (mismo hábito que los
 bugs anteriores: reproducir en aislamiento, no asumir).
+
+## 2026-07-06 — Rename completo: "Daniela" (bot) → "Julieta"
+Pedido explícito del dueño: rename COMPLETO, no solo el prompt. Daniela
+sigue siendo la ejecutiva de ventas (la dueña del negocio); Julieta es el
+nombre del bot que la asiste. `git mv bots/daniela bots/julieta` (preserva
+historial), todo el código (`TOOLS_DANIELA`→`TOOLS_JULIETA`,
+`DANIELA_SYSTEM` absorbido en el system prompt dinámico de `nodo_asistente`,
+imports `bots.daniela`→`bots.julieta`), BD renombradas
+(`memoria_daniela.sqlite`→`memoria_julieta.sqlite`,
+`datos_daniela.sqlite`→`datos_julieta.sqlite`; eran solo residuos de pruebas
+del dueño de la sesión, sin datos reales — se limpiaron para partir frescos),
+endpoint `/daniela`→`/julieta`, `poe dev-daniela`→`poe dev-julieta`. Sin
+alias de compatibilidad: `obtener_bot('daniela')` ahora falla explícito.
+
+## 2026-07-06 — Nombre por usuario: router_entrada mira el ALMACÉN, no el mensaje
+Julieta se presenta y pregunta el nombre la primera vez que un teléfono le
+escribe, y lo saluda por su nombre después. Aclaración conceptual que motivó
+el diseño: `thread_id` es por CONVERSACIÓN, pero en WhatsApp
+`thread_id = From` (el número) → conversación == usuario, así que el
+teléfono ya se captura gratis; solo faltaba la tabla `usuarios(telefono →
+nombre)`. Diseño:
+- `router_entrada(state, config)` en `bots/julieta/grafo.py`: a diferencia
+  del router de Alejandro (mira el CONTENIDO del último mensaje), este mira
+  el ALMACÉN (`almacen.obtener_nombre(thread_id)`) — otra forma válida de
+  arista condicional. Verificado que LangGraph pasa `config` tanto a nodos
+  como a funciones de `add_conditional_edges`.
+- `nodo_saludo` FIJO (sin LLM, mismo patrón que Alejandro) pide el nombre y
+  termina el turno (→ END): la pregunta queda esperando respuesta.
+- La tool `guardar_nombre(nombre, config: RunnableConfig)` recibe el
+  `thread_id` INYECTADO por LangChain — verificado que el LLM no lo ve ni lo
+  decide (`tool.args` no incluye "config" en el schema). Así la tool sabe A
+  QUIÉN pertenece el nombre sin que el modelo tenga que inventar o pedir el
+  teléfono, que ya se tiene gratis.
+- `nodo_asistente(state, config)` arma un system prompt DINÁMICO: si el
+  almacén ya tiene nombre para ese teléfono, instruye a saludar por nombre;
+  si no, instruye a pedirlo y guardarlo con la tool en cuanto llegue.
+
+## 2026-07-06 — Update y delete de registros, con confirmación obligatoria para eliminar
+`almacen.actualizar(categoria, id, campo, valor)` y
+`almacen.eliminar(categoria, id)`, ambas con whitelist doble: `CATEGORIAS`
+(ya existía) + `CAMPOS_EDITABLES` nuevo (ni `id` ni `creado` son editables —
+son identidad/auditoría, no datos de negocio). Devuelven `bool` (existía o
+no) en vez de lanzar excepción por id inexistente — un ID que no existe no
+es un error de programación, es un caso de uso normal (usuario se equivocó
+de número). Decisión del dueño: **eliminar exige confirmación explícita**,
+implementada como regla en el system prompt (no en código) — el LLM debe
+mostrar el registro, preguntar, y solo llamar `eliminar_registro` tras un
+"sí" en el mismo hilo. Actualizar NO requiere confirmación (menos
+destructivo) pero debe repetir el cambio hecho. Se optó por regla de prompt
+en vez de un paso de código intermedio porque el flujo de confirmación es
+inherentemente conversacional (multi-turno) — forzarlo en el grafo hubiera
+significado un nodo de espera explícito, más complejo que necesario para el
+volumen de uso real (una ejecutiva, no un call center).
+
+## 2026-07-06 — Despliegue en VPS: systemd + uv + Caddy, SIN Docker
+Pregunta del dueño: ¿dockerizar es bazooka para esto? Sí. El beneficio
+central de Docker (reproducibilidad) ya está cubierto: `uv.lock` congela
+versiones exactas, `uv` instala hasta el Python correcto en el servidor, y
+las dependencias son wheels puros. El estado son 3 SQLite + un `.env` — no
+hay servicios que orquestar. Stack elegido (carpeta `deploy/` con todo):
+- **Hetzner** (~€4/mes, ubicación Ashburn por latencia a Chile) + Ubuntu.
+- **systemd** (`deploy/bots.service`): mantiene vivo uvicorn, arranca al
+  boot, logs con journalctl — el rol de Docker+restart policy, nativo.
+- **Caddy** (`deploy/Caddyfile`): reverse proxy con HTTPS automático de
+  Let's Encrypt en 2 líneas (los webhooks EXIGEN https válido).
+- **DuckDNS** gratis como dominio → URL fija, reemplaza a ngrok.
+- **Backups** (`deploy/respaldar.sh` + cron): usa la API .backup de SQLite
+  (no `cp`, que con WAL puede copiar estado a medio escribir), 14 días.
+- **Deploy diario** (`deploy/actualizar.sh`): git pull + uv sync + restart.
+- `.gitattributes` fuerza LF en `deploy/**` (scripts editados en Windows
+  con CRLF revientan bash en Linux: "\r: command not found").
+Docker se reevalúa si aparece: segundo servicio (Postgres/Redis/workers),
+segundo dev, o CI/CD frecuente. Guía completa paso a paso: deploy/GUIA.md.

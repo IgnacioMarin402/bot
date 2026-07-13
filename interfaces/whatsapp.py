@@ -44,7 +44,7 @@ from nucleo.ejecucion import responder
 from nucleo.llm import tiene_audio, tiene_vision
 from nucleo.mensajes import mensaje_con_audio, mensaje_con_imagen
 
-app = FastAPI(title="Bots de WhatsApp — Alejandro y Daniela")
+app = FastAPI(title="Bots de WhatsApp — Alejandro y Julieta")
 
 
 def twiml(textos: list[str]) -> Response:
@@ -76,7 +76,7 @@ def _limpiar_memoria(nombre_bot: str, thread_id: str) -> None:
 @app.get("/")
 def salud():
     """Comprobación rápida de que el servidor vive (ábrelo en el navegador)."""
-    return {"ok": True, "bots": ["alejandro (/whatsapp)", "daniela (/daniela)"]}
+    return {"ok": True, "bots": ["alejandro (/whatsapp)", "julieta (/julieta)"]}
 
 
 def _atender(
@@ -150,13 +150,13 @@ def recibir_alejandro(
     return _atender("alejandro", Body, From, NumMedia, MediaUrl0, MediaContentType0)
 
 
-@app.post("/daniela")
-def recibir_daniela(
+@app.post("/julieta")
+def recibir_julieta(
     Body: str = Form(""),
     From: str = Form("desconocido"),
     NumMedia: str = Form("0"),
     MediaUrl0: str = Form(""),
     MediaContentType0: str = Form(""),
 ) -> Response:
-    """Webhook de la asistente de Daniela (registro de ventas/pendientes/etc.)."""
-    return _atender("daniela", Body, From, NumMedia, MediaUrl0, MediaContentType0)
+    """Webhook de Julieta (asistente de Daniela: registro de ventas/pendientes/etc.)."""
+    return _atender("julieta", Body, From, NumMedia, MediaUrl0, MediaContentType0)

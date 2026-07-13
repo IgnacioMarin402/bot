@@ -1,5 +1,5 @@
 """
-EXPORTACIÓN a Excel de los datos de Daniela.
+EXPORTACIÓN a Excel de los datos que administra Julieta.
 
 Daniela vive en Excel: este módulo convierte el almacén SQLite de vuelta a
 su formato natural — un .xlsx con una hoja por categoría (ventas,
@@ -9,7 +9,7 @@ Uso (lo corre el dueño del proyecto, no el bot):
 
     uv run poe exportar
 
-Genera exports/daniela_<fecha>_<hora>.xlsx y deja el archivo listo para
+Genera exports/julieta_<fecha>_<hora>.xlsx y deja el archivo listo para
 mandárselo. Es un script y no una tool a propósito: por WhatsApp el bot solo
 puede responder texto (mandar archivos requiere hostearlos en una URL
 pública — anotado como mejora futura en el roadmap).
@@ -21,7 +21,7 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
-from bots.daniela import almacen
+from bots.julieta import almacen
 
 CARPETA_EXPORTS = Path(__file__).resolve().parents[2] / "exports"
 
@@ -31,7 +31,7 @@ def exportar_excel(ruta: Path | None = None) -> Path:
     if ruta is None:
         marca = datetime.now().strftime("%Y-%m-%d_%H%M")
         CARPETA_EXPORTS.mkdir(exist_ok=True)
-        ruta = CARPETA_EXPORTS / f"daniela_{marca}.xlsx"
+        ruta = CARPETA_EXPORTS / f"julieta_{marca}.xlsx"
 
     libro = Workbook()
     libro.remove(libro.active)  # partir sin la hoja vacía por defecto

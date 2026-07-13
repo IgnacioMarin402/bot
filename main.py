@@ -3,12 +3,13 @@ Punto de entrada del proyecto.
 
 Uso:
     python main.py             -> chatea con Alejandro (default)
-    python main.py daniela     -> chatea con la asistente de Daniela
+    python main.py julieta     -> chatea con Julieta, la asistente de Daniela
 
 Estructura (arquitectura Ports & Adapters):
 
-    nucleo/        <- plataforma compartida (LLM, State, protecciones) + Alejandro
-    bots/daniela/  <- el bot de Daniela (almacén, tools, nodo, grafo)
+    nucleo/        <- plataforma compartida (LLM, State, protecciones)
+    bots/alejandro/<- el bot Alejandro (nodos, router, tools, grafo)
+    bots/julieta/  <- el bot Julieta (almacén, tools, nodo, grafo)
     interfaces/    <- adaptadores: cli.py (terminal) y whatsapp.py (webhook)
 
 Regla de oro: nucleo/ NUNCA importa de interfaces/. Solo al revés.
