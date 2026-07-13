@@ -22,9 +22,10 @@ testear el almacén sin gastar API.)
 
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
-RUTA_DATOS = Path(__file__).resolve().parents[2] / "datos_julieta.sqlite"
+from nucleo.config import ruta_datos
+
+RUTA_DATOS = ruta_datos("datos_julieta.sqlite")
 
 _ESQUEMA = """
 CREATE TABLE IF NOT EXISTS ventas (

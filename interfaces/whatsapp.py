@@ -40,11 +40,15 @@ from fastapi.responses import Response
 from langchain_core.messages import HumanMessage
 
 from bots import obtener_bot
+from interfaces.meta import router as router_meta
 from nucleo.ejecucion import responder
 from nucleo.llm import tiene_audio, tiene_vision
 from nucleo.mensajes import mensaje_con_audio, mensaje_con_imagen
 
 app = FastAPI(title="Bots de WhatsApp — Alejandro y Julieta")
+# Canal Meta (WhatsApp Cloud API, sin Twilio): rutas /meta/{bot}. Mismo grafo,
+# otro adaptador — ver interfaces/meta.py.
+app.include_router(router_meta)
 
 
 def twiml(textos: list[str]) -> Response:
@@ -76,7 +80,11 @@ def _limpiar_memoria(nombre_bot: str, thread_id: str) -> None:
 @app.get("/")
 def salud():
     """Comprobación rápida de que el servidor vive (ábrelo en el navegador)."""
-    return {"ok": True, "bots": ["alejandro (/whatsapp)", "julieta (/julieta)"]}
+    return {
+        "ok": True,
+        "twilio": ["alejandro (/whatsapp)", "julieta (/julieta)"],
+        "meta": ["alejandro (/meta/alejandro)", "julieta (/meta/julieta)"],
+    }
 
 
 def _atender(

@@ -11,7 +11,6 @@ Daniela para que el mismo teléfono hable con ambos sin mezclar historiales).
 
 import sqlite3
 from functools import lru_cache
-from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
@@ -20,9 +19,10 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from bots.alejandro.nodos import nodo_broma, nodo_chat, nodo_flojera, nodo_once, nodo_saludo
 from bots.alejandro.router import router, router_entrada
 from bots.alejandro.tools import TOOLS
+from nucleo.config import ruta_datos
 from nucleo.state import State
 
-RUTA_DB = Path(__file__).resolve().parents[2] / "memoria.sqlite"
+RUTA_DB = ruta_datos("memoria.sqlite")
 
 
 def construir_grafo():

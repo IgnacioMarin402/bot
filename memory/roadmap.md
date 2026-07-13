@@ -4,11 +4,20 @@ Actualizar al terminar cada hito (mover a "Hecho" con fecha).
 
 ## Siguiente
 
-1. **Segundo número de Twilio** (en curso por el dueño, 2026-07-06): con dos
-   números, cada uno apunta a su URL (`/whatsapp` y `/julieta`) y ambos bots
-   viven a la vez. Configurar el webhook de cada número en Twilio. Ojo: el
-   número nuevo necesita WhatsApp habilitado (verificación Meta Business) —
-   si es un número solo-SMS no sirve directo.
+1. **🔴 CREAR EL VOLUMEN EN FLY (urgente, antes de datos reales)**: hoy los
+   SQLite viven en disco EFÍMERO — cada deploy los borra. Pasos:
+   `fly volumes create datos --region iad --size 1` → descomentar [mounts] y
+   [env] en fly.toml → `fly deploy`. El código ya está listo (ruta_datos()).
+2. **Configurar Meta** (en curso por el dueño, 2026-07-13): cuenta + app en
+   developers.facebook.com, número de WhatsApp, y en el panel del webhook:
+   - Callback URL: `https://bot-chuleta.fly.dev/meta/julieta`
+   - Verify token: el mismo string que pongas en `fly secrets set META_VERIFY_TOKEN=...`
+   - Suscribirse al campo **messages**
+   - Secrets: META_ACCESS_TOKEN (System User p/ producción) y META_APP_SECRET.
+   El adaptador (`interfaces/meta.py`) ya está desplegable y probado offline.
+3. Revisar `[[vm]]` en fly.toml: tiene `memory = '1gb'` Y `memory_mb = 256`
+   a la vez (conflicto; 256MB es justo para el stack LangChain — subir a 512
+   si hay OOM o arranques lentos).
 2. **Julieta v3** (después de que Daniela la pruebe de verdad):
    - Enviar el Excel por WhatsApp (requiere hostear el archivo en URL pública
      y responder TwiML con `<Media>`).
@@ -62,6 +71,14 @@ Para probar **imágenes**: `LLM_PROVIDER=gemini` (o `claude`) en `.env`, más
 
 ## Hecho
 
+- 2026-07-13: 🚀 **DESPLEGADO EN FLY.IO** (por el dueño; app `bot-chuleta`,
+  región iad). Guía de Hetzner queda como referencia histórica.
+- 2026-07-13: **Adaptador Meta (WhatsApp Cloud API)** — `interfaces/meta.py`:
+  handshake GET, firma X-Hub-Signature-256, dedup por wamid, BackgroundTasks
+  + respuesta vía Graph API, media en 2 pasos. Probado offline (TestClient,
+  envío mockeado). Twilio sigue operativo en paralelo.
+- 2026-07-13: **ruta_datos() + DATOS_DIR** — los 3 SQLite ya no asumen la
+  raíz del proyecto; en Fly apuntarán al volumen /data (pendiente crearlo).
 - 2026-07-06: **Rename daniela → julieta + nombre por usuario + update/delete**
   — `bots/daniela/` → `bots/julieta/` (git mv, historial preservado); BD
   renombradas (`datos_julieta.sqlite`, `memoria_julieta.sqlite`); endpoint

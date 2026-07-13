@@ -42,9 +42,17 @@ bots/            → registro `obtener_bot(nombre)`; un paquete por bot
   alejandro/     → nodos, router, tools, grafo (memoria.sqlite)
   julieta/       → asistente ventas telco: almacen.py (datos_julieta.sqlite),
                    tools, nodos, grafo (agente puro, sin router), exportar.py
-interfaces/      → adaptadores de entrada (cli.py, whatsapp.py — /whatsapp y /julieta)
+interfaces/      → adaptadores de entrada:
+  cli.py         →   terminal
+  whatsapp.py    →   Twilio (/whatsapp, /julieta) — monta la app FastAPI
+  meta.py        →   WhatsApp Cloud API directo (/meta/{bot}), APIRouter
 memory/          → memoria del proyecto (decisiones y roadmap)
 ```
+
+Producción: **Fly.io** (app `bot-chuleta`, ver fly.toml + Dockerfile).
+⚠️ El disco de Fly es efímero: los SQLite usan `nucleo.config.ruta_datos()`
+que respeta `DATOS_DIR` (=/data, un volumen persistente). Sin volumen
+montado, cada deploy borra los datos — ver bloque [mounts] en fly.toml.
 
 Son DOS bots (Alejandro y Julieta) — no generalizar a "N bots" sin necesidad.
 Cada bot tiene memoria SQLite propia (memoria.sqlite / memoria_julieta.sqlite)

@@ -305,3 +305,34 @@ hay servicios que orquestar. Stack elegido (carpeta `deploy/` con todo):
   con CRLF revientan bash en Linux: "\r: command not found").
 Docker se reevalúa si aparece: segundo servicio (Postgres/Redis/workers),
 segundo dev, o CI/CD frecuente. Guía completa paso a paso: deploy/GUIA.md.
+
+## 2026-07-13 — Despliegue final: Fly.io (no Hetzner) — decisión del dueño
+El dueño desplegó por su cuenta en Fly.io (app `bot-chuleta`, región iad,
+Dockerfile generado por Fly Launch + ajustes propios). La guía de Hetzner
+(deploy/GUIA.md) queda como referencia histórica. Nota irónica registrada
+con cariño: terminamos con Docker igual — pero lo maneja Fly, no nosotros.
+Gotcha CRÍTICO detectado en revisión: el disco del contenedor en Fly es
+EFÍMERO — sin un volumen montado, cada deploy borra los SQLite (memoria de
+bots + datos de Daniela). Fix: `ruta_datos()` en nucleo/config.py (env
+DATOS_DIR) + bloque [mounts] preparado en fly.toml (comentado hasta crear
+el volumen con `fly volumes create datos --region iad --size 1`).
+
+## 2026-07-13 — Adaptador Meta (WhatsApp Cloud API) en interfaces/meta.py
+Rutas GET/POST `/meta/{bot}` montadas como APIRouter en la misma app que
+corre Fly. Tres diferencias de contrato vs Twilio, todas manejadas:
+1. Handshake GET con hub.verify_token/hub.challenge (config del panel Meta).
+2. La respuesta NO viaja en el HTTP response (Twilio: TwiML; Meta: 200
+   rápido + POST aparte a la Graph API `/{phone_number_id}/messages` con
+   Bearer). Por eso el webhook agenda el trabajo en BackgroundTasks y
+   responde al tiro — si el LLM tarda, Meta no reintenta.
+3. Firma X-Hub-Signature-256 (HMAC-SHA256 del cuerpo con App Secret)
+   validada con compare_digest — la seguridad que en Twilio quedó pendiente
+   aquí nace incluida.
+Extras del mundo real: dedup por wamid (Meta reintenta webhooks; deque
+maxlen=200), eventos de estado (delivered/read) ignorados con 200, media
+por media_id (2 pasos con token), mime limpiado de "; codecs=opus".
+thread_id = wa_id ("569..." sin prefijo whatsapp:) — canal nuevo, memoria
+nueva; no se migran hilos de Twilio. Graph API v21.0 (verificada vigente),
+configurable vía META_GRAPH_VERSION. Todo probado offline con TestClient y
+el envío mockeado: handshake, firma inválida 403, texto→saludo de Julieta,
+dedup, statuses ignorados. Twilio sigue funcionando en paralelo.

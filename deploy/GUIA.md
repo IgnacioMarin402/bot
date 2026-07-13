@@ -1,5 +1,11 @@
 # 🚀 Guía de despliegue en Hetzner (paso a paso, desde cero)
 
+> ⚠️ **NOTA HISTÓRICA (2026-07-13):** el dueño finalmente desplegó en
+> **Fly.io** (app `bot-chuleta`, ver `fly.toml` y `Dockerfile` en la raíz).
+> Esta guía queda como referencia por si algún día se migra a un VPS
+> clásico. Lo VIGENTE para Fly está en fly.toml (incluida la sección de
+> persistencia con volumen — CRÍTICA) y en memory/decisiones.md.
+
 > Para quien nunca montó un VPS. Tiempo estimado: 1-2 horas la primera vez.
 > Decisión de diseño: **sin Docker** — systemd + uv + Caddy (ver
 > memory/decisiones.md). La reproducibilidad la da `uv.lock`.

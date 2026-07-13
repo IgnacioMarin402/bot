@@ -17,7 +17,6 @@ el mismo número de teléfono pueda hablar con ambos bots sin mezclar historiale
 
 import sqlite3
 from functools import lru_cache
-from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -27,9 +26,10 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from bots.julieta import almacen
 from bots.julieta.nodos import nodo_asistente, nodo_saludo
 from bots.julieta.tools import TOOLS_JULIETA
+from nucleo.config import ruta_datos
 from nucleo.state import State
 
-RUTA_DB = Path(__file__).resolve().parents[2] / "memoria_julieta.sqlite"
+RUTA_DB = ruta_datos("memoria_julieta.sqlite")
 
 
 def router_entrada(state: State, config: RunnableConfig) -> str:

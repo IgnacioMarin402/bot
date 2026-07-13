@@ -16,6 +16,19 @@ primary_region = 'iad'
   min_machines_running = 0
   processes = ['app']
 
+# ⚠️ PERSISTENCIA (CRÍTICO): sin esto, el disco del contenedor es EFÍMERO y
+# cada deploy/reinicio BORRA los SQLite (memoria de los bots + datos de
+# Daniela). Para activarla:
+#   1. Crear el volumen (una sola vez):  fly volumes create datos --region iad --size 1
+#   2. Descomentar los dos bloques de abajo
+#   3. fly deploy
+# [mounts]
+#   source = 'datos'
+#   destination = '/data'
+#
+# [env]
+#   DATOS_DIR = '/data'
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
